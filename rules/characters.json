@@ -1,0 +1,689 @@
+{
+  "version": 2,
+  "characters": [
+    {
+      "id": "q",
+      "name_key": "character.q",
+      "name": "Q",
+      "profession": "arcanist",
+      "health": 8,
+      "stamina": 2,
+      "mana": 2,
+      "ai_persona": "control",
+      "passive": {
+        "id": "thunder_blessing",
+        "name": "雷霆祝福",
+        "description": "免疫麻痹；每回合第一次雷电伤害+1。",
+        "name_key": "passive.thunder_blessing"
+      },
+      "skills": [
+        {
+          "id": "q_stargaze",
+          "name": "观星",
+          "cost": {
+            "stamina": 0,
+            "mana": 2
+          },
+          "target": "self",
+          "range": 0,
+          "effects": [
+            {
+              "op": "draw",
+              "amount": 2
+            },
+            {
+              "op": "self_discard",
+              "amount": 1
+            },
+            {
+              "op": "armor",
+              "amount": 1
+            }
+          ],
+          "description": "摸2张牌，然后弃1张牌并获得1点护甲。",
+          "name_key": "skill.q_stargaze"
+        },
+        {
+          "id": "q_thunder_call",
+          "name": "唤雷",
+          "cost": {
+            "stamina": 1,
+            "mana": 1
+          },
+          "target": "enemy",
+          "range": 3,
+          "effects": [
+            {
+              "op": "damage",
+              "amount": 1,
+              "kind": "lightning"
+            },
+            {
+              "op": "status",
+              "status": "paralyze",
+              "stacks": 1
+            }
+          ],
+          "description": "造成1点雷电伤害并施加麻痹。",
+          "name_key": "skill.q_thunder_call"
+        }
+      ],
+      "starter_cards": [
+        "slash",
+        "slash",
+        "slash",
+        "slash",
+        "heavenly_sense",
+        "heavenly_sense",
+        "iron_body",
+        "iron_body",
+        "rapid_healing",
+        "purify",
+        "holy_spring",
+        "hearty_meal",
+        "mana_bolt",
+        "mana_bolt",
+        "lightning_chain",
+        "lightning_chain",
+        "arcane_barrier",
+        "arcane_barrier",
+        "prayer",
+        "prayer"
+      ]
+    },
+    {
+      "id": "k",
+      "name_key": "character.k",
+      "name": "K",
+      "profession": "arcanist",
+      "health": 10,
+      "stamina": 1,
+      "mana": 3,
+      "ai_persona": "resource",
+      "passive": {
+        "id": "spell_rhythm",
+        "name": "沉浸坍缩",
+        "description": "每回合第一张技能牌少消耗1点法力。",
+        "name_key": "passive.spell_rhythm"
+      },
+      "skills": [
+        {
+          "id": "k_megamind",
+          "name": "大脑洞",
+          "cost": {
+            "stamina": 0,
+            "mana": 2
+          },
+          "target": "self",
+          "range": 0,
+          "effects": [
+            {
+              "op": "modifier",
+              "modifier": "free_cast",
+              "stacks": 1
+            },
+            {
+              "op": "modifier",
+              "modifier": "echo",
+              "stacks": 1
+            },
+            {
+              "op": "armor",
+              "amount": 1
+            }
+          ],
+          "description": "下一张牌费用为0，下一张伤害牌额外造成1点伤害，并获得1点护甲。",
+          "name_key": "skill.k_megamind"
+        },
+        {
+          "id": "k_brainstorm",
+          "name": "灵感风暴",
+          "cost": {
+            "stamina": 0,
+            "mana": 2
+          },
+          "target": "self",
+          "range": 0,
+          "effects": [
+            {
+              "op": "draw",
+              "amount": 2
+            },
+            {
+              "op": "extra_action",
+              "amount": 1
+            }
+          ],
+          "description": "摸2张牌并获得1个额外行动。",
+          "name_key": "skill.k_brainstorm"
+        }
+      ],
+      "starter_cards": [
+        "slash",
+        "slash",
+        "slash",
+        "slash",
+        "heavenly_sense",
+        "heavenly_sense",
+        "iron_body",
+        "iron_body",
+        "rapid_healing",
+        "purify",
+        "holy_spring",
+        "hearty_meal",
+        "mana_bolt",
+        "mana_bolt",
+        "recursion",
+        "recursion",
+        "echo",
+        "echo",
+        "arcane_barrier",
+        "arcane_barrier"
+      ]
+    },
+    {
+      "id": "shya",
+      "name_key": "character.shya",
+      "name": "Shya",
+      "profession": "trickster",
+      "health": 8,
+      "stamina": 2,
+      "mana": 2,
+      "ai_persona": "control",
+      "passive": {
+        "id": "flash_guard",
+        "name": "混乱情绪",
+        "description": "每回合第一次受到的非真实伤害减少1点。",
+        "name_key": "passive.flash_guard"
+      },
+      "skills": [
+        {
+          "id": "shya_dazzling_flash",
+          "name": "耀眼闪光",
+          "cost": {
+            "stamina": 0,
+            "mana": 1
+          },
+          "target": "enemy",
+          "range": 3,
+          "effects": [
+            {
+              "op": "status",
+              "status": "confusion",
+              "stacks": 1
+            },
+            {
+              "op": "draw",
+              "amount": 1
+            }
+          ],
+          "description": "使一名敌人混乱，然后摸1张牌。",
+          "name_key": "skill.shya_dazzling_flash"
+        },
+        {
+          "id": "shya_flash_break",
+          "name": "闪光破裂",
+          "cost": {
+            "stamina": 1,
+            "mana": 2
+          },
+          "target": "enemy",
+          "range": 2,
+          "effects": [
+            {
+              "op": "damage",
+              "amount": 2,
+              "kind": "piercing"
+            }
+          ],
+          "description": "造成2点穿透伤害。",
+          "name_key": "skill.shya_flash_break"
+        }
+      ],
+      "starter_cards": [
+        "slash",
+        "slash",
+        "slash",
+        "slash",
+        "heavenly_sense",
+        "heavenly_sense",
+        "iron_body",
+        "iron_body",
+        "rapid_healing",
+        "purify",
+        "holy_spring",
+        "hearty_meal",
+        "quick_cut",
+        "quick_cut",
+        "marked_strike",
+        "marked_strike",
+        "smoke_screen",
+        "smoke_screen",
+        "loaded_dice",
+        "loaded_dice"
+      ]
+    },
+    {
+      "id": "ginger",
+      "name_key": "character.ginger",
+      "name": "Ginger",
+      "profession": "vanguard",
+      "health": 9,
+      "stamina": 3,
+      "mana": 1,
+      "ai_persona": "offense",
+      "passive": {
+        "id": "strong_attack",
+        "name": "强攻",
+        "description": "攻击当前生命高于其生命上限一半的敌人时伤害+1。",
+        "name_key": "passive.strong_attack"
+      },
+      "skills": [
+        {
+          "id": "ginger_fist_way",
+          "name": "拳道",
+          "cost": {
+            "stamina": 1,
+            "mana": 0
+          },
+          "target": "enemy",
+          "range": 1,
+          "effects": [
+            {
+              "op": "damage",
+              "amount": 2,
+              "kind": "normal"
+            }
+          ],
+          "description": "造成2点普通伤害。",
+          "name_key": "skill.ginger_fist_way"
+        },
+        {
+          "id": "ginger_guard_up",
+          "name": "架势",
+          "cost": {
+            "stamina": 1,
+            "mana": 0
+          },
+          "target": "self",
+          "range": 0,
+          "effects": [
+            {
+              "op": "armor",
+              "amount": 2
+            },
+            {
+              "op": "resource",
+              "resource": "stamina",
+              "amount": 1
+            }
+          ],
+          "description": "获得2点护甲并回复1点体力。",
+          "name_key": "skill.ginger_guard_up"
+        }
+      ],
+      "starter_cards": [
+        "slash",
+        "slash",
+        "slash",
+        "slash",
+        "heavenly_sense",
+        "heavenly_sense",
+        "iron_body",
+        "iron_body",
+        "rapid_healing",
+        "purify",
+        "holy_spring",
+        "hearty_meal",
+        "crushing_blow",
+        "crushing_blow",
+        "guard_break",
+        "guard_break",
+        "hold_line",
+        "hold_line",
+        "second_wind",
+        "second_wind"
+      ]
+    },
+    {
+      "id": "zc",
+      "name_key": "character.zc",
+      "name": "Z&C",
+      "profession": "stalker",
+      "health": 10,
+      "stamina": 2,
+      "mana": 2,
+      "ai_persona": "offense",
+      "passive": {
+        "id": "motor",
+        "name": "马达与虫标",
+        "description": "移动距离+1并免疫中毒。",
+        "name_key": "passive.motor"
+      },
+      "skills": [
+        {
+          "id": "zc_madness",
+          "name": "狂极",
+          "cost": {
+            "stamina": 1,
+            "mana": 0
+          },
+          "target": "enemy",
+          "range": 2,
+          "effects": [
+            {
+              "op": "damage",
+              "amount": 2,
+              "kind": "normal"
+            },
+            {
+              "op": "status",
+              "status": "poison",
+              "stacks": 2
+            }
+          ],
+          "description": "造成2点普通伤害并施加2层中毒。",
+          "name_key": "skill.zc_madness"
+        },
+        {
+          "id": "zc_poison_mist",
+          "name": "毒雾扩散",
+          "cost": {
+            "stamina": 0,
+            "mana": 1
+          },
+          "target": "all_enemies_in_range",
+          "range": 1,
+          "effects": [
+            {
+              "op": "status",
+              "status": "poison",
+              "stacks": 1
+            }
+          ],
+          "description": "使所有相邻敌人获得1层中毒。",
+          "name_key": "skill.zc_poison_mist"
+        }
+      ],
+      "starter_cards": [
+        "slash",
+        "slash",
+        "slash",
+        "slash",
+        "heavenly_sense",
+        "heavenly_sense",
+        "iron_body",
+        "iron_body",
+        "rapid_healing",
+        "purify",
+        "holy_spring",
+        "hearty_meal",
+        "venomous_jab",
+        "venomous_jab",
+        "pursuit",
+        "pursuit",
+        "evasive_step",
+        "evasive_step",
+        "poison_mist",
+        "poison_mist"
+      ]
+    },
+    {
+      "id": "na1",
+      "name_key": "character.na1",
+      "name": "Na1",
+      "profession": "trickster",
+      "health": 8,
+      "stamina": 2,
+      "mana": 2,
+      "ai_persona": "resource",
+      "passive": {
+        "id": "gold_guard",
+        "name": "御金",
+        "description": "受到普通伤害时，每1金币可抵消1点伤害并消耗该金币。",
+        "name_key": "passive.gold_guard"
+      },
+      "skills": [
+        {
+          "id": "na1_foresight",
+          "name": "远见",
+          "cost": {
+            "stamina": 0,
+            "mana": 1
+          },
+          "target": "self",
+          "range": 0,
+          "effects": [
+            {
+              "op": "coins",
+              "amount": 1
+            },
+            {
+              "op": "draw",
+              "amount": 1
+            }
+          ],
+          "description": "获得1金币并摸1张牌。",
+          "name_key": "skill.na1_foresight"
+        },
+        {
+          "id": "na1_free_spirit",
+          "name": "自由之意",
+          "cost": {
+            "stamina": 1,
+            "mana": 1
+          },
+          "target": "self",
+          "range": 0,
+          "effects": [
+            {
+              "op": "heal",
+              "amount": 2
+            },
+            {
+              "op": "resource",
+              "resource": "stamina",
+              "amount": 1
+            },
+            {
+              "op": "resource",
+              "resource": "mana",
+              "amount": 1
+            }
+          ],
+          "description": "回复2点生命、1点体力和1点法力。",
+          "name_key": "skill.na1_free_spirit"
+        }
+      ],
+      "starter_cards": [
+        "slash",
+        "slash",
+        "slash",
+        "slash",
+        "heavenly_sense",
+        "heavenly_sense",
+        "iron_body",
+        "iron_body",
+        "rapid_healing",
+        "purify",
+        "holy_spring",
+        "hearty_meal",
+        "coin_dagger",
+        "coin_dagger",
+        "feint",
+        "feint",
+        "misdirection",
+        "misdirection",
+        "black_market",
+        "black_market"
+      ]
+    },
+    {
+      "id": "maddy",
+      "name_key": "character.maddy",
+      "name": "Maddy",
+      "profession": "vanguard",
+      "health": 9,
+      "stamina": 2,
+      "mana": 1,
+      "ai_persona": "resource",
+      "passive": {
+        "id": "treasure_pouch",
+        "name": "宝物袋",
+        "description": "第一次触发财富格时额外获得1金币。",
+        "name_key": "passive.treasure_pouch"
+      },
+      "skills": [
+        {
+          "id": "maddy_prospect",
+          "name": "勘探",
+          "cost": {
+            "stamina": 0,
+            "mana": 0
+          },
+          "target": "self",
+          "range": 0,
+          "effects": [
+            {
+              "op": "coins",
+              "amount": 1
+            },
+            {
+              "op": "armor",
+              "amount": 1
+            }
+          ],
+          "description": "获得1金币和1点护甲。",
+          "name_key": "skill.maddy_prospect"
+        },
+        {
+          "id": "maddy_reclamation",
+          "name": "围垦",
+          "cost": {
+            "stamina": 1,
+            "mana": 1
+          },
+          "target": "enemy",
+          "range": 2,
+          "effects": [
+            {
+              "op": "damage",
+              "amount": 2,
+              "kind": "piercing"
+            }
+          ],
+          "description": "对距离2内的一名敌人造成2点穿透伤害。",
+          "name_key": "skill.maddy_reclamation"
+        }
+      ],
+      "starter_cards": [
+        "slash",
+        "slash",
+        "slash",
+        "slash",
+        "heavenly_sense",
+        "heavenly_sense",
+        "iron_body",
+        "iron_body",
+        "rapid_healing",
+        "purify",
+        "holy_spring",
+        "hearty_meal",
+        "battle_rush",
+        "battle_rush",
+        "brace",
+        "brace",
+        "iron_oath",
+        "iron_oath",
+        "sweep",
+        "sweep"
+      ]
+    },
+    {
+      "id": "signal",
+      "name_key": "character.signal",
+      "name": "Signal",
+      "profession": "stalker",
+      "health": 6,
+      "stamina": 1,
+      "mana": 3,
+      "ai_persona": "control",
+      "passive": {
+        "id": "probe_chaos",
+        "name": "探测混沌",
+        "description": "免疫崩坠伤害；因缩圈被移动时获得1金币。",
+        "name_key": "passive.probe_chaos"
+      },
+      "skills": [
+        {
+          "id": "signal_frequency",
+          "name": "调频",
+          "cost": {
+            "stamina": 0,
+            "mana": 2
+          },
+          "target": "enemy",
+          "range": 3,
+          "effects": [
+            {
+              "op": "damage",
+              "amount": 1,
+              "kind": "piercing"
+            },
+            {
+              "op": "status",
+              "status": "confusion",
+              "stacks": 1
+            }
+          ],
+          "description": "造成1点穿透伤害并施加混乱。",
+          "name_key": "skill.signal_frequency"
+        },
+        {
+          "id": "signal_navigation",
+          "name": "导航推进",
+          "cost": {
+            "stamina": 0,
+            "mana": 2
+          },
+          "target": "self",
+          "range": 0,
+          "effects": [
+            {
+              "op": "draw",
+              "amount": 2
+            },
+            {
+              "op": "armor",
+              "amount": 1
+            }
+          ],
+          "description": "摸2张牌并获得1点护甲。",
+          "name_key": "skill.signal_navigation"
+        }
+      ],
+      "starter_cards": [
+        "slash",
+        "slash",
+        "slash",
+        "slash",
+        "heavenly_sense",
+        "heavenly_sense",
+        "iron_body",
+        "iron_body",
+        "rapid_healing",
+        "purify",
+        "holy_spring",
+        "hearty_meal",
+        "ambush_shot",
+        "ambush_shot",
+        "gushing_blood",
+        "gushing_blood",
+        "camouflage",
+        "camouflage",
+        "collapse_sense",
+        "collapse_sense"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "packages": [
+    {
+      "name": "Lucide Icons",
+      "author": "Lucide Contributors",
+      "source": "https://github.com/lucide-icons/lucide",
+      "revision": "658573b0171e693bc965c167592cc0b92d002a3e",
+      "license": "ISC",
+      "license_file": "lucide/LICENSE",
+      "usage": "Game HUD and command icons",
+      "modifications": "None; Godot imports the source SVG files."
+    },
+    {
+      "name": "Noto Sans SC",
+      "author": "The Noto Project Authors",
+      "source": "https://github.com/google/fonts/tree/main/ofl/notosanssc",
+      "revision": "684b69db51d59a3137ec0152fa3a3afc6f1b3814",
+      "license": "OFL-1.1",
+      "license_file": "noto_sans_sc/OFL.txt",
+      "usage": "Simplified Chinese game interface",
+      "modifications": "Renamed downloaded variable font file only.",
+      "sha256": "12dee92da1fe3438dac801cb0cf6d09188a193ff7047ce7c573a9b7530e06207"
+    },
+    {
+      "name": "Kenney UI Audio",
+      "author": "Kenney Vleugels",
+      "source": "https://kenney.nl/assets/ui-audio",
+      "retrieved": "2026-08-02",
+      "license": "CC0-1.0",
+      "license_file": "kenney_audio/UI_AUDIO_LICENSE.txt",
+      "usage": "Accepted and rejected command feedback",
+      "modifications": "Selected click1.ogg and click5.ogg from the original archive; audio is otherwise unchanged.",
+      "archive_sha256": "946fc23a63d535d693eb31b2eabb80c8c28d6351e2186b344ceb71b2cb1d5eb6"
+    },
+    {
+      "name": "Kenney Impact Sounds 1.0",
+      "author": "Kenney",
+      "source": "https://kenney.nl/assets/impact-sounds",
+      "retrieved": "2026-08-02",
+      "license": "CC0-1.0",
+      "license_file": "kenney_audio/IMPACT_SOUNDS_LICENSE.txt",
+      "usage": "Card, damage, defeat and board-collapse feedback",
+      "modifications": "Selected five variants each from the soft-medium, metal-light and wood-heavy families; audio is otherwise unchanged.",
+      "archive_sha256": "029d734af1582474edf3a694d1b0cebc97c1c152f2f39fa34d4c2bafc5de77f8"
+    }
+  ]
+}

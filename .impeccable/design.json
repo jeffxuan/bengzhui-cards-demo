@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-22T00:00:00+08:00",
+  "title": "Design System: 崩坠牌局",
+  "extensions": {
+    "colorMeta": {
+      "primary": {"role": "primary", "displayName": "暗潮玫红", "canonical": "oklch(0.50 0.15 330)", "tonalRamp": ["oklch(0.15 0.15 330)", "oklch(0.25 0.15 330)", "oklch(0.35 0.15 330)", "oklch(0.45 0.15 330)", "oklch(0.55 0.15 330)", "oklch(0.68 0.13 330)", "oklch(0.82 0.08 330)", "oklch(0.95 0.02 330)"]},
+      "gold": {"role": "accent", "displayName": "奖励金", "canonical": "oklch(0.78 0.14 83)", "tonalRamp": ["oklch(0.15 0.12 83)", "oklch(0.25 0.13 83)", "oklch(0.35 0.14 83)", "oklch(0.48 0.14 83)", "oklch(0.62 0.14 83)", "oklch(0.74 0.14 83)", "oklch(0.86 0.09 83)", "oklch(0.95 0.03 83)"]}
+    },
+    "shadows": [{"name": "modal", "value": "0 8px 8px rgba(0,0,0,0.30)", "purpose": "阻塞式事件、响应和设置弹层"}],
+    "motion": [{"name": "state", "value": "200ms ease-out", "purpose": "选择、伤害和状态变化"}],
+    "breakpoints": [{"name": "compact", "value": "1280x720"}, {"name": "standard", "value": "1920x1080"}]
+  },
+  "components": [],
+  "narrative": {
+    "northStar": "深夜决斗桌",
+    "overview": "固定格式的战术工作区，氛围服务于规则可读性。",
+    "keyCharacteristics": ["固定棋盘", "克制色彩", "直接反馈", "可复现状态"],
+    "rules": [{"name": "稀有强调色", "body": "深玫红只表示可执行操作和选中。", "section": "colors"}],
+    "dos": ["用图标、颜色和文字共同表达状态。"],
+    "donts": ["不要紫蓝渐变、玻璃拟态、卡片套卡片和营销页式大标题。"]
+  }
+}

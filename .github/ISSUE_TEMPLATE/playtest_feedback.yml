@@ -1,0 +1,42 @@
+name: 试玩反馈
+description: 提交一局完整试玩的体验与数据
+title: "[Playtest] "
+labels: ["playtest"]
+body:
+  - type: textarea
+    id: debug
+    attributes:
+      label: 对局调试信息
+      description: 使用顶栏“对局信息”按钮复制并粘贴。
+    validations:
+      required: true
+  - type: input
+    id: duration
+    attributes:
+      label: 对局时长
+      placeholder: 12分30秒
+    validations:
+      required: true
+  - type: dropdown
+    id: clarity
+    attributes:
+      label: 是否理解淘汰缩圈和决胜阶段
+      options: ["完全理解", "部分理解", "没有理解"]
+    validations:
+      required: true
+  - type: textarea
+    id: best_moment
+    attributes:
+      label: 最有爽感的时刻
+    validations:
+      required: true
+  - type: textarea
+    id: friction
+    attributes:
+      label: 最卡顿或无聊的时刻
+    validations:
+      required: true
+  - type: textarea
+    id: other
+    attributes:
+      label: 其他反馈

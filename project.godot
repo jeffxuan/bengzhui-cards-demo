@@ -1,0 +1,37 @@
+; Engine configuration file.
+; This project is pinned to the locally installed Godot 4.6.3 runtime.
+config_version=5
+
+[application]
+
+config/name="崩坠牌局"
+config/version="0.1.0-dev.1"
+run/main_scene="res://scenes/Main.tscn"
+config/features=PackedStringArray("4.6")
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/size/window_width_override=1280
+window/size/window_height_override=720
+window/stretch/mode="canvas_items"
+
+[debug]
+
+gdscript/warnings/treat_warnings_as_errors=true
+
+[internationalization]
+
+locale/fallback="zh_CN"
+
+[gui]
+
+theme/default_font_multichannel_signed_distance_field=true
+
+[rendering]
+
+environment/defaults/default_clear_color=Color(0.043, 0.047, 0.059, 1)
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true

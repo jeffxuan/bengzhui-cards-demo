@@ -1,0 +1,24 @@
+{
+  "version": 3,
+  "board_size": 15,
+  "collapse_mode": "elimination",
+  "collapse_sizes": [15, 11, 7],
+  "round_limit": 8,
+  "duel_pressure": [
+    {"start_round": 5, "single_target_damage_bonus": 1},
+    {"start_round": 7, "single_target_damage_bonus": 2}
+  ],
+  "starting_hand": 4,
+  "draw_per_turn": 2,
+  "hand_limit": 6,
+  "move_range": 3,
+  "action_points": 2,
+  "armor_cap": 3,
+  "market_size": 3,
+  "market_buys_per_turn": 1,
+  "event_deck_size": 16,
+  "start_positions": [[2,2],[12,2],[2,12],[12,12]],
+  "wealth_tiles": [[4,2],[10,2],[2,4],[12,4],[2,10],[12,10],[4,12],[10,12],[7,5],[7,9]],
+  "event_tiles": [[7,2],[2,7],[12,7],[7,12],[4,4],[10,4],[4,10],[10,10],[5,5],[9,5],[5,9],[9,9]],
+  "trap_tiles": [[6,6],[7,6],[8,6],[6,7],[8,7],[6,8],[7,8],[8,8]]
+}

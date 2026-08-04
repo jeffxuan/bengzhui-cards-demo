@@ -1,0 +1,31 @@
+name: Verify public demo
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.6.3
+          use-dotnet: false
+          include-templates: true
+      - name: Verify rules, UI, and simulations
+        run: scripts/ci/verify.sh
+      - name: Export Windows build
+        run: godot --headless --path . --export-release "Windows Desktop"
+      - name: Export macOS build
+        run: godot --headless --path . --export-release "macOS"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bengzhui-public-demo
+          path: export/
+          if-no-files-found: error

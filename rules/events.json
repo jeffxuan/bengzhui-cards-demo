@@ -1,0 +1,387 @@
+{
+  "version": 1,
+  "events": [
+    {
+      "id": "orange_yogurt_rice",
+      "name_key": "event.orange_yogurt_rice",
+      "title": "橘子与酸奶拌饭",
+      "category": "reward",
+      "description": "回复1点生命、1点体力和1点法力。",
+      "effects": [
+        {
+          "op": "heal",
+          "amount": 1
+        },
+        {
+          "op": "resource",
+          "resource": "stamina",
+          "amount": 1
+        },
+        {
+          "op": "resource",
+          "resource": "mana",
+          "amount": 1
+        }
+      ],
+      "title_key": "event.orange_yogurt_rice.title",
+      "description_key": "event.orange_yogurt_rice.description"
+    },
+    {
+      "id": "guitar_analysis_one",
+      "name_key": "event.guitar_analysis_one",
+      "title": "木吉他的力量分析之一",
+      "category": "reward",
+      "description": "获得1层灼热。",
+      "effects": [
+        {
+          "op": "status",
+          "status": "scorch",
+          "stacks": 1
+        }
+      ],
+      "title_key": "event.guitar_analysis_one.title",
+      "description_key": "event.guitar_analysis_one.description"
+    },
+    {
+      "id": "guitar_analysis_two",
+      "name_key": "event.guitar_analysis_two",
+      "title": "木吉他的力量分析之二",
+      "category": "reward",
+      "description": "摸2张牌并回复1点生命。",
+      "effects": [
+        {
+          "op": "draw",
+          "amount": 2
+        },
+        {
+          "op": "heal",
+          "amount": 1
+        }
+      ],
+      "title_key": "event.guitar_analysis_two.title",
+      "description_key": "event.guitar_analysis_two.description"
+    },
+    {
+      "id": "guitar_analysis_three",
+      "name_key": "event.guitar_analysis_three",
+      "title": "木吉他的力量分析之三",
+      "category": "reward",
+      "description": "本回合获得1个额外行动。",
+      "effects": [
+        {
+          "op": "extra_action",
+          "amount": 1
+        }
+      ],
+      "title_key": "event.guitar_analysis_three.title",
+      "description_key": "event.guitar_analysis_three.description"
+    },
+    {
+      "id": "pilot",
+      "name_key": "event.pilot",
+      "title": "飞行员",
+      "category": "reward",
+      "description": "本回合获得一次额外移动。",
+      "effects": [
+        {
+          "op": "extra_move",
+          "amount": 1
+        }
+      ],
+      "title_key": "event.pilot.title",
+      "description_key": "event.pilot.description"
+    },
+    {
+      "id": "surge_market",
+      "name_key": "event.surge_market",
+      "title": "防浪涌交易市场",
+      "category": "reward",
+      "description": "获得2金币。",
+      "effects": [
+        {
+          "op": "coins",
+          "amount": 2
+        }
+      ],
+      "title_key": "event.surge_market.title",
+      "description_key": "event.surge_market.description"
+    },
+    {
+      "id": "revolutionary_remnants",
+      "name_key": "event.revolutionary_remnants",
+      "title": "革命军残部",
+      "category": "reward",
+      "description": "进入隐匿并回复1点体力。",
+      "effects": [
+        {
+          "op": "status",
+          "status": "hidden",
+          "stacks": 1
+        },
+        {
+          "op": "resource",
+          "resource": "stamina",
+          "amount": 1
+        }
+      ],
+      "title_key": "event.revolutionary_remnants.title",
+      "description_key": "event.revolutionary_remnants.description"
+    },
+    {
+      "id": "map_master",
+      "name_key": "event.map_master",
+      "title": "图师",
+      "category": "reward",
+      "description": "获得2点护甲。",
+      "effects": [
+        {
+          "op": "armor",
+          "amount": 2
+        }
+      ],
+      "title_key": "event.map_master.title",
+      "description_key": "event.map_master.description"
+    },
+    {
+      "id": "cult_of_madmen",
+      "name_key": "event.cult_of_madmen",
+      "title": "疯子教团",
+      "category": "choice",
+      "description": "献出资源换取生命，或拒绝仪式。",
+      "choices": [
+        {
+          "id": "ritual",
+          "label": "失去1点体力和法力，回复2点生命",
+          "requires": {
+            "stamina": 1,
+            "mana": 1
+          },
+          "effects": [
+            {
+              "op": "resource",
+              "resource": "stamina",
+              "amount": -1
+            },
+            {
+              "op": "resource",
+              "resource": "mana",
+              "amount": -1
+            },
+            {
+              "op": "heal",
+              "amount": 2
+            }
+          ],
+          "label_key": "event_choice.ritual"
+        },
+        {
+          "id": "refuse",
+          "label": "拒绝仪式，获得1点护甲",
+          "effects": [
+            {
+              "op": "armor",
+              "amount": 1
+            }
+          ],
+          "label_key": "event_choice.refuse"
+        }
+      ],
+      "title_key": "event.cult_of_madmen.title",
+      "description_key": "event.cult_of_madmen.description"
+    },
+    {
+      "id": "maniacal_sorcerer",
+      "name_key": "event.maniacal_sorcerer",
+      "title": "狂极术士",
+      "category": "choice",
+      "description": "以手牌换资源，或稳妥补牌。",
+      "choices": [
+        {
+          "id": "discard",
+          "label": "弃2张牌，回复2点体力",
+          "requires": {
+            "hand": 2
+          },
+          "effects": [
+            {
+              "op": "self_discard",
+              "amount": 2
+            },
+            {
+              "op": "resource",
+              "resource": "stamina",
+              "amount": 2
+            }
+          ],
+          "label_key": "event_choice.discard"
+        },
+        {
+          "id": "draw",
+          "label": "摸1张牌",
+          "effects": [
+            {
+              "op": "draw",
+              "amount": 1
+            }
+          ],
+          "label_key": "event_choice.draw"
+        }
+      ],
+      "title_key": "event.maniacal_sorcerer.title",
+      "description_key": "event.maniacal_sorcerer.description"
+    },
+    {
+      "id": "banished_diviner",
+      "name_key": "event.banished_diviner",
+      "title": "被流放的占卜师",
+      "category": "choice",
+      "description": "支付金币换牌，或接受小礼物。",
+      "choices": [
+        {
+          "id": "pay",
+          "label": "支付2金币，摸3张牌",
+          "requires": {
+            "coins": 2
+          },
+          "effects": [
+            {
+              "op": "coins",
+              "amount": -2
+            },
+            {
+              "op": "draw",
+              "amount": 3
+            }
+          ],
+          "label_key": "event_choice.pay"
+        },
+        {
+          "id": "gift",
+          "label": "获得1金币",
+          "effects": [
+            {
+              "op": "coins",
+              "amount": 1
+            }
+          ],
+          "label_key": "event_choice.gift"
+        }
+      ],
+      "title_key": "event.banished_diviner.title",
+      "description_key": "event.banished_diviner.description"
+    },
+    {
+      "id": "mind_reader",
+      "name_key": "event.mind_reader",
+      "title": "读心师",
+      "category": "choice",
+      "description": "公开情报换补给，或保持沉默。",
+      "choices": [
+        {
+          "id": "reveal",
+          "label": "展示手牌，摸2张牌",
+          "effects": [
+            {
+              "op": "reveal_hand"
+            },
+            {
+              "op": "draw",
+              "amount": 2
+            }
+          ],
+          "label_key": "event_choice.reveal"
+        },
+        {
+          "id": "silent",
+          "label": "保持沉默，失去1点法力",
+          "effects": [
+            {
+              "op": "resource",
+              "resource": "mana",
+              "amount": -1
+            }
+          ],
+          "label_key": "event_choice.silent"
+        }
+      ],
+      "title_key": "event.mind_reader.title",
+      "description_key": "event.mind_reader.description"
+    },
+    {
+      "id": "border_patrol",
+      "name_key": "event.border_patrol",
+      "title": "边境巡逻军",
+      "category": "pressure",
+      "description": "受到1点真实伤害并失去1金币。",
+      "effects": [
+        {
+          "op": "damage",
+          "amount": 1,
+          "kind": "true"
+        },
+        {
+          "op": "coins",
+          "amount": -1
+        }
+      ],
+      "title_key": "event.border_patrol.title",
+      "description_key": "event.border_patrol.description"
+    },
+    {
+      "id": "locust_plague",
+      "name_key": "event.locust_plague",
+      "title": "蝗虫成灾",
+      "category": "pressure",
+      "description": "受到1点真实伤害并弃1张牌。",
+      "effects": [
+        {
+          "op": "damage",
+          "amount": 1,
+          "kind": "true"
+        },
+        {
+          "op": "self_discard",
+          "amount": 1
+        }
+      ],
+      "title_key": "event.locust_plague.title",
+      "description_key": "event.locust_plague.description"
+    },
+    {
+      "id": "thunderstorm",
+      "name_key": "event.thunderstorm",
+      "title": "雷暴",
+      "category": "pressure",
+      "description": "受到1点雷电伤害并被麻痹。",
+      "effects": [
+        {
+          "op": "damage",
+          "amount": 1,
+          "kind": "lightning"
+        },
+        {
+          "op": "status",
+          "status": "paralyze",
+          "stacks": 1
+        }
+      ],
+      "title_key": "event.thunderstorm.title",
+      "description_key": "event.thunderstorm.description"
+    },
+    {
+      "id": "darkest_dungeon",
+      "name_key": "event.darkest_dungeon",
+      "title": "暗黑地牢",
+      "category": "pressure",
+      "description": "弃2张牌；不足时每少一张受到1点真实伤害。",
+      "effects": [
+        {
+          "op": "discard_or_damage",
+          "amount": 2
+        }
+      ],
+      "title_key": "event.darkest_dungeon.title",
+      "description_key": "event.darkest_dungeon.description"
+    }
+  ]
+}

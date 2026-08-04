@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "statuses": [
+    {"id":"paralyze","name_key":"status.paralyze","name":"麻痹","max_stacks":1,"timing":"turn_start","duration":"until_next_turn_start","clear":"结算后清除，或被净化。","description":"下回合不能免费移动。"},
+    {"id":"bleed","name_key":"status.bleed","name":"流血","max_stacks":3,"timing":"turn_start","duration":"stack_count","clear":"每次结算减1层，或被净化。","description":"回合开始受到1点真实伤害并减少1层。"},
+    {"id":"poison","name_key":"status.poison","name":"中毒","max_stacks":4,"timing":"turn_start_and_four_stacks","duration":"until_cleansed_or_burst","clear":"被净化，或4层爆发后清空。","description":"回合开始受到1点真实伤害；4层时立即受3点真实伤害并清空。"},
+    {"id":"confusion","name_key":"status.confusion","name":"混乱","max_stacks":1,"timing":"draw","duration":"until_next_draw","clear":"下次抽牌步骤结算后清除，或被净化。","description":"下次抽牌少摸2张。"},
+    {"id":"hidden","name_key":"status.hidden","name":"隐匿","max_stacks":1,"timing":"damage_attack_or_turn_end","duration":"until_attack_or_next_turn_end","clear":"发动第一次攻击后清除，最迟于下个自己回合结束清除。","description":"受到的非真实伤害-1；第一次攻击伤害+1且不可响应，然后解除。"},
+    {"id":"scorch","name_key":"status.scorch","name":"灼热","max_stacks":2,"timing":"next_attack","duration":"stack_count","clear":"每张造成伤害的攻击消耗1层，或被净化。","description":"下一张造成伤害的攻击额外造成1点伤害。"}
+  ]
+}

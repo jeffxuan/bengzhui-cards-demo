@@ -2,8 +2,10 @@ extends SceneTree
 
 const ContentCatalogScript = preload("res://scripts/core/content_catalog.gd")
 const EventDeckScript = preload("res://scripts/core/event_deck.gd")
+const AIControllerScript = preload("res://scripts/core/ai_controller.gd")
 const MatchCommandScript = preload("res://scripts/core/match_command.gd")
 const MatchStateScript = preload("res://scripts/core/match_state.gd")
+const SaveServiceScript = preload("res://scripts/core/save_service.gd")
 
 var failures: Array[String] = []
 var catalog: RefCounted
@@ -15,6 +17,7 @@ func _init() -> void:
 	rules = _load_rules()
 	_test_content_contract()
 	_test_event_deck_no_repeat()
+	_test_event_deck_boundaries()
 	_test_orthogonal_move_path()
 	_test_single_response_window()
 	_test_piercing_ignores_armor()
@@ -25,12 +28,14 @@ func _init() -> void:
 	_test_duel_pressure_exclusions_and_action_wipe()
 	_test_turn_start_defeat_finishes_cleanly()
 	_test_deterministic_seed()
+	_test_replay_recovery_and_compatibility()
+	_test_empty_resource_boundaries()
 	_test_round_limit_tiebreak_order()
 	_test_active_skill_once_per_turn()
 	_test_maddy_wealth_bonus_once_per_match()
 	_test_status_contract_and_resolution()
 	if failures.is_empty():
-		print("RULE_TESTS_OK: 16 test groups passed.")
+		print("RULE_TESTS_OK: 19 test groups passed.")
 		quit(0)
 		return
 	for failure: String in failures:
@@ -55,6 +60,20 @@ func _test_event_deck_no_repeat() -> void:
 		seen[event_id] = true
 	_expect(int(deck.call("remaining_count")) == 0, "Event draw pile should be empty after 16 unique draws.")
 	_expect(int(deck.call("discard_count")) == 16, "All drawn events should be in the discard pile.")
+
+
+func _test_event_deck_boundaries() -> void:
+	var cards: Array[Dictionary] = catalog.get("events") as Array[Dictionary]
+	var deck: RefCounted = EventDeckScript.new(cards, 101)
+	for _index: int in cards.size():
+		deck.call("draw")
+	var recycled: Dictionary = deck.call("draw") as Dictionary
+	_expect(not recycled.is_empty(), "The event discard pile should recycle only after exhaustion.")
+	_expect(int(deck.call("remaining_count")) == cards.size() - 1, "Recycling should leave fifteen events in the new draw pile.")
+	_expect(int(deck.call("discard_count")) == 1, "Only the recycled event should enter the new discard pile.")
+	var empty_deck: RefCounted = EventDeckScript.new([], 102)
+	_expect((empty_deck.call("draw") as Dictionary).is_empty(), "An empty event deck should return an empty definition without crashing.")
+	_expect(int(empty_deck.call("remaining_count")) == 0 and int(empty_deck.call("discard_count")) == 0, "An empty event deck should remain empty after a draw attempt.")
 
 
 func _test_orthogonal_move_path() -> void:
@@ -340,6 +359,92 @@ func _test_deterministic_seed() -> void:
 	_expect(state_one.get("event_history") == state_two.get("event_history"), "Equal seed and commands must emit identical MatchEvents.")
 
 
+func _test_replay_recovery_and_compatibility() -> void:
+	var state: RefCounted = _new_state(2026)
+	var ai: RefCounted = AIControllerScript.new()
+	for _step: int in 20:
+		if bool(state.get("finished")):
+			break
+		var pending_action: Dictionary = state.get("pending_action") as Dictionary
+		var actor_id: int = int((state.call("current_player") as Dictionary).get("id", -1)) if pending_action.is_empty() else int(pending_action.get("responder_id", -1))
+		var command: Dictionary = ai.call("choose_command", state, actor_id) as Dictionary
+		_expect(not command.is_empty(), "Replay fixture AI should always find a legal command.")
+		if command.is_empty():
+			break
+		_expect(bool(state.call("submit_command", command)), "Replay fixture commands should resolve successfully.")
+	var replay: Dictionary = state.call("replay_document") as Dictionary
+	var original_replay: Dictionary = replay.duplicate(true)
+	var rebuilt: Dictionary = SaveServiceScript.rebuild_match(MatchStateScript, rules, catalog, replay)
+	_expect(bool(rebuilt.get("ok", false)), "A compatible replay should rebuild successfully: %s" % String(rebuilt.get("error", "")))
+	if bool(rebuilt.get("ok", false)):
+		var rebuilt_state: RefCounted = rebuilt.get("state") as RefCounted
+		_expect(rebuilt_state.call("deterministic_snapshot") == state.call("deterministic_snapshot"), "Replay recovery must reproduce the deterministic snapshot.")
+		_expect(rebuilt_state.get("event_history") == state.get("event_history"), "Replay recovery must reproduce the complete MatchEvent history.")
+	_expect(replay == original_replay, "Rebuilding a match must not mutate the replay document.")
+
+	var old_rules_replay: Dictionary = replay.duplicate(true)
+	old_rules_replay["rules_version"] = 2
+	var old_rules_before: Dictionary = old_rules_replay.duplicate(true)
+	var rejected: Dictionary = SaveServiceScript.rebuild_match(MatchStateScript, rules, catalog, old_rules_replay)
+	_expect(not bool(rejected.get("ok", false)) and String(rejected.get("error", "")).contains("规则版本"), "Rules-v2 mid-match saves must be rejected with a readable error.")
+	_expect(old_rules_replay == old_rules_before, "Rejecting a rules-incompatible replay must preserve the input document.")
+
+	var old_content_replay: Dictionary = replay.duplicate(true)
+	old_content_replay["content_version"] = int(catalog.get("version")) + 1
+	var old_content_before: Dictionary = old_content_replay.duplicate(true)
+	rejected = SaveServiceScript.rebuild_match(MatchStateScript, rules, catalog, old_content_replay)
+	_expect(not bool(rejected.get("ok", false)) and String(rejected.get("error", "")).contains("内容版本"), "Content-incompatible saves must be rejected with a readable error.")
+	_expect(old_content_replay == old_content_before, "Rejecting a content-incompatible replay must preserve the input document.")
+
+	var invalid_replay: Dictionary = replay.duplicate(true)
+	var invalid_commands: Array = invalid_replay.get("commands", []) as Array
+	invalid_commands.append(MatchCommandScript.make(MatchCommandScript.MOVE, 99, {"path": [[1, 1]]}))
+	var invalid_before: Dictionary = invalid_replay.duplicate(true)
+	rejected = SaveServiceScript.rebuild_match(MatchStateScript, rules, catalog, invalid_replay)
+	_expect(not bool(rejected.get("ok", false)) and String(rejected.get("error", "")).contains("命令无法重放"), "A replay containing an invalid command must be rejected.")
+	_expect(invalid_replay == invalid_before, "Rejecting an invalid command sequence must preserve the input document.")
+
+
+func _test_empty_resource_boundaries() -> void:
+	var state: RefCounted = _new_state(2030)
+	var active: Dictionary = state.call("player", 0) as Dictionary
+	active["hand"] = []
+	active["deck"] = []
+	active["discard"] = ["slash", "heavy_slash"]
+	state.get("players")[0] = active
+	state.call("_draw_cards", 0, 2)
+	active = state.call("player", 0) as Dictionary
+	_expect((active.get("hand", []) as Array).size() == 2, "Drawing should reshuffle the player's discard pile after the deck is exhausted.")
+	_expect((active.get("deck", []) as Array).is_empty() and (active.get("discard", []) as Array).is_empty(), "A complete two-card reshuffle should consume both source piles.")
+
+	active["hand"] = []
+	active["deck"] = []
+	active["discard"] = []
+	state.get("players")[0] = active
+	state.call("_draw_cards", 0, 2)
+	active = state.call("player", 0) as Dictionary
+	_expect((active.get("hand", []) as Array).is_empty(), "Drawing from empty deck and discard piles should be a no-op.")
+
+	active["coins"] = 0
+	active["actions"] = 2
+	active["hand"] = []
+	state.get("players")[0] = active
+	var commands: Array[Dictionary] = state.call("legal_commands", 0) as Array[Dictionary]
+	_expect(not _has_command_type(commands, MatchCommandScript.BUY), "A player with zero coins should have no market purchase command.")
+	_expect(not _has_command_type(commands, MatchCommandScript.PLAY_CARD), "An empty hand should expose no play-card command.")
+
+	active["hand"] = ["slash"]
+	active["stamina"] = 3
+	active["position"] = Vector2i(0, 0)
+	state.get("players")[0] = active
+	for target_id: int in [1, 2, 3]:
+		var target: Dictionary = state.call("player", target_id) as Dictionary
+		target["position"] = [Vector2i(14, 14), Vector2i(14, 13), Vector2i(13, 14)][target_id - 1]
+		state.get("players")[target_id] = target
+	commands = state.call("legal_commands", 0) as Array[Dictionary]
+	_expect(not _has_card_command(commands, "slash"), "A targeted attack should not be offered when no enemy is in range.")
+
+
 func _test_round_limit_tiebreak_order() -> void:
 	var cases: Array[Dictionary] = [
 		{"name": "eliminations", "winner": 1, "p0": {"eliminations": 0, "health": 8, "damage": 9, "armor": 3, "hand": 3}, "p1": {"eliminations": 1, "health": 1, "damage": 0, "armor": 0, "hand": 0}},
@@ -449,6 +554,20 @@ func _find_move(commands: Array[Dictionary], destination: Array[int]) -> Diction
 		if not path.is_empty() and path.back() == destination:
 			return command
 	return {}
+
+
+func _has_command_type(commands: Array[Dictionary], command_type: String) -> bool:
+	for command: Dictionary in commands:
+		if String(command.get("type", "")) == command_type:
+			return true
+	return false
+
+
+func _has_card_command(commands: Array[Dictionary], card_id: String) -> bool:
+	for command: Dictionary in commands:
+		if String(command.get("type", "")) == MatchCommandScript.PLAY_CARD and String((command.get("payload", {}) as Dictionary).get("card_id", "")) == card_id:
+			return true
+	return false
 
 
 func _load_rules() -> Dictionary:

@@ -276,6 +276,7 @@ func _build_match_screen() -> void:
 	body.add_child(_sidebar_scroll(_build_right_sidebar(), 285))
 	page.add_child(_build_hand_band())
 	_build_modal_layer()
+	end_turn_button.grab_focus.call_deferred()
 
 
 func _build_top_bar() -> Control:
@@ -497,7 +498,7 @@ func _refresh_hand() -> void:
 		var card_id: String = String(card_value)
 		var definition: Dictionary = catalog.call("card", card_id) as Dictionary
 		var button: Button = Button.new()
-		button.custom_minimum_size = Vector2(145, 94)
+		button.custom_minimum_size = Vector2(260, 94)
 		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		button.text = "%s\n%s\n%s" % [String(definition.get("name", card_id)), _cost_text(definition), _short_text(String(definition.get("description", "")), 28)]
 		button.icon = _category_icon(String(definition.get("category", "")))
@@ -810,6 +811,7 @@ func _open_settings() -> void:
 	close_button.text = "保存并返回"
 	close_button.pressed.connect(_close_settings)
 	modal_actions.add_child(close_button)
+	volume_slider.grab_focus.call_deferred()
 
 
 func _open_debug_info() -> void:

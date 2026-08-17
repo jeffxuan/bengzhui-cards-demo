@@ -29,13 +29,14 @@ func _init() -> void:
 	_test_turn_start_defeat_finishes_cleanly()
 	_test_deterministic_seed()
 	_test_replay_recovery_and_compatibility()
+	_test_replay_structure_validation()
 	_test_empty_resource_boundaries()
 	_test_round_limit_tiebreak_order()
 	_test_active_skill_once_per_turn()
 	_test_maddy_wealth_bonus_once_per_match()
 	_test_status_contract_and_resolution()
 	if failures.is_empty():
-		print("RULE_TESTS_OK: 19 test groups passed.")
+		print("RULE_TESTS_OK: 20 test groups passed.")
 		quit(0)
 		return
 	for failure: String in failures:
@@ -403,6 +404,30 @@ func _test_replay_recovery_and_compatibility() -> void:
 	rejected = SaveServiceScript.rebuild_match(MatchStateScript, rules, catalog, invalid_replay)
 	_expect(not bool(rejected.get("ok", false)) and String(rejected.get("error", "")).contains("命令无法重放"), "A replay containing an invalid command must be rejected.")
 	_expect(invalid_replay == invalid_before, "Rejecting an invalid command sequence must preserve the input document.")
+
+
+func _test_replay_structure_validation() -> void:
+	var state: RefCounted = _new_state(2027)
+	var replay: Dictionary = state.call("replay_document") as Dictionary
+	var malformed_commands: Dictionary = replay.duplicate(true)
+	malformed_commands["commands"] = {"not": "an array"}
+	var rejected: Dictionary = SaveServiceScript.rebuild_match(MatchStateScript, rules, catalog, malformed_commands)
+	_expect(not bool(rejected.get("ok", false)) and String(rejected.get("error", "")).contains("结构不完整"), "A replay with a non-array command sequence must be rejected without a runtime error.")
+
+	var short_roster: Dictionary = replay.duplicate(true)
+	short_roster["roster"] = ["q"]
+	rejected = SaveServiceScript.rebuild_match(MatchStateScript, rules, catalog, short_roster)
+	_expect(not bool(rejected.get("ok", false)) and String(rejected.get("error", "")).contains("结构不完整"), "A replay without four roster entries must be rejected.")
+
+	var unknown_character: Dictionary = replay.duplicate(true)
+	unknown_character["roster"] = ["q", "ginger", "maddy", "missing_character"]
+	rejected = SaveServiceScript.rebuild_match(MatchStateScript, rules, catalog, unknown_character)
+	_expect(not bool(rejected.get("ok", false)) and String(rejected.get("error", "")).contains("无效角色"), "A replay with an unknown character id must be rejected instead of silently substituting Q.")
+
+	var invalid_seed: Dictionary = replay.duplicate(true)
+	invalid_seed["seed"] = "not-a-number"
+	rejected = SaveServiceScript.rebuild_match(MatchStateScript, rules, catalog, invalid_seed)
+	_expect(not bool(rejected.get("ok", false)) and String(rejected.get("error", "")).contains("结构不完整"), "A replay with a non-numeric seed must be rejected.")
 
 
 func _test_empty_resource_boundaries() -> void:

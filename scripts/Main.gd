@@ -66,7 +66,8 @@ func _ready() -> void:
 		return
 	set_process_unhandled_key_input(true)
 	ui_font = load("res://assets/third_party/noto_sans_sc/NotoSansSC-Variable.ttf") as Font
-	settings = SaveServiceScript.load_settings()
+	var settings_result: Dictionary = SaveServiceScript.load_settings_result()
+	settings = settings_result.get("settings", {}) as Dictionary
 	theme = _build_theme(float(settings.get("text_scale", 1.0)))
 	_apply_audio_settings()
 	audio_feedback = AudioFeedbackScript.new() as AudioFeedback
@@ -77,7 +78,7 @@ func _ready() -> void:
 	if not bool(catalog.call("is_valid")):
 		_show_fatal_error("内容校验失败：\n%s" % "\n".join(catalog.get("validation_errors") as Array[String]))
 		return
-	_show_character_select()
+	_show_character_select(String(settings_result.get("error", "")))
 
 
 func _run_export_smoke() -> void:
@@ -114,6 +115,13 @@ func _run_export_smoke() -> void:
 func _show_character_select(message: String = "") -> void:
 	_clear_screen()
 	state = null
+	var replay_result: Dictionary = SaveServiceScript.load_replay_result()
+	var notices: Array[String] = []
+	if not message.is_empty():
+		notices.append(message)
+	var replay_error: String = String(replay_result.get("error", ""))
+	if not replay_error.is_empty():
+		notices.append(replay_error)
 	var background: ColorRect = _background()
 	screen_root.add_child(background)
 	var center: CenterContainer = CenterContainer.new()
@@ -129,9 +137,10 @@ func _show_character_select(message: String = "") -> void:
 	var subtitle: Label = _label("选择你的角色", 18, COLORS["muted"] as Color)
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	content.add_child(subtitle)
-	if not message.is_empty():
-		var message_label: Label = _label(message, 15, COLORS["danger"] as Color)
+	if not notices.is_empty():
+		var message_label: Label = _label("\n".join(notices), 15, COLORS["danger"] as Color)
 		message_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		message_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		content.add_child(message_label)
 	var selection_band: HBoxContainer = HBoxContainer.new()
 	selection_band.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -165,10 +174,15 @@ func _show_character_select(message: String = "") -> void:
 	var detail_box: VBoxContainer = VBoxContainer.new()
 	detail_box.add_theme_constant_override("separation", 12)
 	detail_panel.add_child(detail_box)
+	var detail_scroll: ScrollContainer = ScrollContainer.new()
+	detail_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	detail_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	detail_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	detail_box.add_child(detail_scroll)
 	character_detail_label = _label("", 16, COLORS["ink"] as Color)
 	character_detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	character_detail_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	detail_box.add_child(character_detail_label)
+	character_detail_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	detail_scroll.add_child(character_detail_label)
 	start_button = Button.new()
 	start_button.text = "以此角色开始"
 	start_button.icon = load("res://assets/third_party/lucide/swords.svg") as Texture2D
@@ -179,8 +193,7 @@ func _show_character_select(message: String = "") -> void:
 	footer.alignment = BoxContainer.ALIGNMENT_CENTER
 	footer.add_theme_constant_override("separation", 12)
 	content.add_child(footer)
-	var replay: Dictionary = SaveServiceScript.load_replay()
-	if not replay.is_empty():
+	if bool(replay_result.get("ok", false)) and bool(replay_result.get("exists", false)):
 		var continue_button: Button = Button.new()
 		continue_button.text = "继续上局"
 		continue_button.icon = load("res://assets/third_party/lucide/scroll-text.svg") as Texture2D
@@ -236,7 +249,11 @@ func _start_new_match() -> void:
 
 
 func _continue_match() -> void:
-	var replay: Dictionary = SaveServiceScript.load_replay()
+	var replay_result: Dictionary = SaveServiceScript.load_replay_result()
+	if not bool(replay_result.get("ok", false)) or not bool(replay_result.get("exists", false)):
+		_show_character_select(String(replay_result.get("error", "未找到可继续的对局存档。")))
+		return
+	var replay: Dictionary = replay_result.get("document", {}) as Dictionary
 	var rebuilt: Dictionary = SaveServiceScript.rebuild_match(MatchStateScript, rules, catalog, replay)
 	if not bool(rebuilt.get("ok", false)):
 		_show_character_select(String(rebuilt.get("error", "无法继续上局。")))
@@ -635,8 +652,8 @@ func _after_state_change() -> void:
 		return
 	if bool(state.get("finished")):
 		SaveServiceScript.clear_replay()
-	else:
-		SaveServiceScript.save_replay(state.call("replay_document") as Dictionary)
+	elif not SaveServiceScript.save_replay(state.call("replay_document") as Dictionary):
+		log_lines.append("[color=#d85b55]无法写入对局存档；请检查存储空间或目录权限。[/color]")
 	_refresh_match_ui()
 	_schedule_ai()
 
@@ -672,8 +689,8 @@ func _run_ai_loop() -> void:
 			log_lines.append("[color=#d85b55]AI 无法提交合法命令。[/color]")
 			break
 		_collect_events()
-		if not bool(state.get("finished")):
-			SaveServiceScript.save_replay(state.call("replay_document") as Dictionary)
+		if not bool(state.get("finished")) and not SaveServiceScript.save_replay(state.call("replay_document") as Dictionary):
+			log_lines.append("[color=#d85b55]无法写入对局存档；请检查存储空间或目录权限。[/color]")
 		_refresh_match_ui()
 	ai_running = false
 	if state != null and bool(state.get("finished")):
@@ -867,11 +884,13 @@ func _debug_info_text() -> String:
 
 
 func _close_settings() -> void:
-	SaveServiceScript.save_settings(settings)
+	var saved: bool = SaveServiceScript.save_settings(settings)
 	settings_open = false
 	if state == null:
-		_show_character_select()
+		_show_character_select("" if saved else "设置无法保存；请检查存储空间或目录权限。")
 	else:
+		if not saved:
+			log_lines.append("[color=#d85b55]设置无法保存；请检查存储空间或目录权限。[/color]")
 		_build_match_screen()
 		_refresh_match_ui()
 
@@ -907,11 +926,13 @@ func _open_tutorial() -> void:
 
 func _close_tutorial() -> void:
 	settings["tutorial_seen"] = true
-	SaveServiceScript.save_settings(settings)
+	var saved: bool = SaveServiceScript.save_settings(settings)
 	settings_open = false
 	if state == null:
-		_show_character_select()
+		_show_character_select("" if saved else "设置无法保存；请检查存储空间或目录权限。")
 	else:
+		if not saved:
+			log_lines.append("[color=#d85b55]设置无法保存；请检查存储空间或目录权限。[/color]")
 		_refresh_match_ui()
 
 

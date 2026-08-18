@@ -1,5 +1,28 @@
 # 本地验证记录
 
+## 2026-08-18 · 公开试玩导出刷新
+
+环境：Godot 4.6.3 stable，Apple M4，规则版本 3，内容版本 2，分支 `codex/public-demo`。
+
+### 自动验证
+
+- 发布级 10000 局模拟通过：平均 6.26 轮、107.89 条命令、2.67 次淘汰。
+- 结束原因：最后存活 8549 局（85.49%），回合上限 1438 局（14.38%），同时全灭 13 局（0.13%）。
+- 角色平衡指数：Q 42.80，K 47.00，Shya 52.44，Ginger 48.76，Z&C 48.88，Na1 48.32，Maddy 54.84，Signal 56.96。
+- 伤害统计：单体 288341，范围 32，决胜加成 89481；未发现非法命令、死循环、无胜者或无效赢家。
+
+### 导出验证
+
+- 固定整局导出冒烟通过：`EXPORT_SMOKE_OK: winner=3 reason=last_survivor commands=113`，退出码 0。
+- macOS 包内可执行文件通过 `lipo -info`，同时包含 `arm64` 与 `x86_64`。
+
+| 平台 | 文件 | 大小（字节） | SHA-256 |
+| --- | --- | ---: | --- |
+| Windows x86_64 | `export/windows/BengzhuiCards.exe` | 117055720 | `79e091952f094eac43dd6cdb2094c01eaa9b3965598b856c39e031279b43a807` |
+| macOS universal | `export/macos/BengzhuiCards.zip` | 72010335 | `48c308a0cc33f25af8ad87025cd803413b6ae441adab7587abeb9f423e252f76` |
+
+Windows 文件已确认为 x86-64 PE；真实 Windows 整局验证仍需外部 Windows 环境完成。12 人封闭测试和至少 30 人公开测试尚未执行，不能由自动模拟替代。
+
 ## 2026-08-17 · 存档恢复与错误反馈硬化
 
 环境：Godot 4.6.3 stable，Apple M4，规则版本 3，内容版本 2。

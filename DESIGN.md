@@ -10,7 +10,7 @@ colors:
   muted: "oklch(0.72 0.02 245)"
   primary: "oklch(0.50 0.15 330)"
   gold: "oklch(0.78 0.14 83)"
-  danger: "oklch(0.58 0.17 25)"
+  danger: "oklch(0.68 0.14 25)"
   success: "oklch(0.66 0.12 150)"
 typography:
   headline:

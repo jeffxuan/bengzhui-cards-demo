@@ -17,11 +17,14 @@ var state: RefCounted
 var move_commands: Dictionary = {}
 var target_ids: Array[int] = []
 var hovered_cell: Vector2i = Vector2i(-1, -1)
+var keyboard_cell: Vector2i = Vector2i(-1, -1)
 var font: Font
 
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	focus_mode = Control.FOCUS_ALL
+	tooltip_text = "棋盘：方向键移动光标，回车确认"
 	custom_minimum_size = Vector2(400, 400)
 	font = load("res://assets/third_party/noto_sans_sc/NotoSansSC-Variable.ttf") as Font
 
@@ -34,7 +37,30 @@ func set_match_state(match_state: RefCounted) -> void:
 func set_interactions(legal_moves: Dictionary, legal_targets: Array[int]) -> void:
 	move_commands = legal_moves.duplicate(true)
 	target_ids = legal_targets.duplicate()
+	_ensure_keyboard_cell()
 	queue_redraw()
+
+
+func set_keyboard_cell(position: Vector2i) -> void:
+	if state == null:
+		keyboard_cell = Vector2i(-1, -1)
+		return
+	var grid_size: int = int(state.get("board_size"))
+	keyboard_cell = Vector2i(clampi(position.x, 0, grid_size - 1), clampi(position.y, 0, grid_size - 1))
+	queue_redraw()
+
+
+func focus_selection() -> void:
+	if state == null:
+		return
+	for player_value: Variant in state.get("players") as Array:
+		var player_state: Dictionary = player_value as Dictionary
+		if target_ids.has(int(player_state.get("id", -1))) and bool(player_state.get("alive", false)):
+			set_keyboard_cell(player_state.get("position", Vector2i.ZERO) as Vector2i)
+			grab_focus()
+			return
+	_ensure_keyboard_cell()
+	grab_focus()
 
 
 func _draw() -> void:
@@ -58,6 +84,8 @@ func _draw() -> void:
 			var destination_key: String = "%d:%d" % [x, y]
 			if move_commands.has(destination_key):
 				draw_rect(rect.grow(-3.0), Color("d94f76"), false, 3.0)
+			if has_focus() and position == keyboard_cell:
+				draw_rect(rect.grow(-6.0), Color("f3c75f"), false, 2.0)
 			_draw_tile_marker(kind, rect, cell_size)
 	_draw_players(origin, cell_size)
 
@@ -100,7 +128,25 @@ func _draw_players(origin: Vector2, cell_size: float) -> void:
 func _gui_input(event: InputEvent) -> void:
 	if state == null:
 		return
-	if event is InputEventMouseMotion:
+	if event is InputEventKey:
+		var key_event: InputEventKey = event as InputEventKey
+		if not key_event.pressed or key_event.echo:
+			return
+		var direction: Vector2i = {
+			KEY_LEFT: Vector2i.LEFT,
+			KEY_RIGHT: Vector2i.RIGHT,
+			KEY_UP: Vector2i.UP,
+			KEY_DOWN: Vector2i.DOWN
+		}.get(key_event.keycode, Vector2i.ZERO) as Vector2i
+		if direction != Vector2i.ZERO:
+			_ensure_keyboard_cell()
+			set_keyboard_cell(keyboard_cell + direction)
+			accept_event()
+		elif key_event.keycode == KEY_ENTER or key_event.keycode == KEY_KP_ENTER:
+			_ensure_keyboard_cell()
+			_activate_cell(keyboard_cell)
+			accept_event()
+	elif event is InputEventMouseMotion:
 		hovered_cell = _cell_at((event as InputEventMouseMotion).position)
 		queue_redraw()
 	elif event is InputEventMouseButton:
@@ -110,13 +156,44 @@ func _gui_input(event: InputEvent) -> void:
 		var cell: Vector2i = _cell_at(mouse_event.position)
 		if cell.x < 0:
 			return
-		for player_value: Variant in state.get("players") as Array:
-			var player_state: Dictionary = player_value as Dictionary
-			var player_position: Vector2i = player_state.get("position", Vector2i.ZERO) as Vector2i
-			if bool(player_state.get("alive", false)) and player_position == cell:
-				player_selected.emit(int(player_state.get("id", -1)))
-				return
-		cell_selected.emit(cell)
+		set_keyboard_cell(cell)
+		grab_focus()
+		_activate_cell(cell)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_FOCUS_ENTER:
+		_ensure_keyboard_cell()
+		queue_redraw()
+	elif what == NOTIFICATION_FOCUS_EXIT:
+		queue_redraw()
+
+
+func _ensure_keyboard_cell() -> void:
+	if state == null:
+		keyboard_cell = Vector2i(-1, -1)
+		return
+	var grid_size: int = int(state.get("board_size"))
+	if keyboard_cell.x >= 0 and keyboard_cell.y >= 0 and keyboard_cell.x < grid_size and keyboard_cell.y < grid_size:
+		return
+	for player_value: Variant in state.get("players") as Array:
+		var player_state: Dictionary = player_value as Dictionary
+		if int(player_state.get("id", -1)) == 0 and bool(player_state.get("alive", false)):
+			keyboard_cell = player_state.get("position", Vector2i.ZERO) as Vector2i
+			return
+	keyboard_cell = Vector2i.ZERO
+
+
+func _activate_cell(cell: Vector2i) -> void:
+	if cell.x < 0:
+		return
+	for player_value: Variant in state.get("players") as Array:
+		var player_state: Dictionary = player_value as Dictionary
+		var player_position: Vector2i = player_state.get("position", Vector2i.ZERO) as Vector2i
+		if bool(player_state.get("alive", false)) and player_position == cell:
+			player_selected.emit(int(player_state.get("id", -1)))
+			return
+	cell_selected.emit(cell)
 
 
 func _get_tooltip(at_position: Vector2) -> String:

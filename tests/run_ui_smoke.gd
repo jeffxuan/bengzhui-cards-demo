@@ -55,11 +55,13 @@ func _run() -> void:
 		var end_turn: Button = main.get("end_turn_button") as Button
 		var audio_feedback: Node = main.get("audio_feedback") as Node
 		_expect(board != null and board.size.x >= 360.0 and board.size.y >= 360.0, "Board must remain usable at %s." % str(viewport_size))
+		_expect(board != null and board.focus_mode == Control.FOCUS_ALL, "Board must accept keyboard focus at %s." % str(viewport_size))
 		_expect(hand_band != null and hand_band.size.y >= 140.0, "Hand band must keep its height at %s (actual %s)." % [str(viewport_size), str(hand_band.size if hand_band != null else Vector2.ZERO)])
 		_expect(hand_band != null and hand_band.get_global_rect().end.y <= float(viewport_size.y), "Hand band must remain inside %s (rect %s)." % [str(viewport_size), str(hand_band.get_global_rect() if hand_band != null else Rect2())])
 		_expect(end_turn != null and end_turn.is_visible_in_tree(), "End-turn command must remain visible at %s." % str(viewport_size))
 		_expect(audio_feedback != null and audio_feedback.get_child_count() == 6, "Audio feedback channels must be ready at %s." % str(viewport_size))
 		_expect(_is_visible_enabled_button(root.gui_get_focus_owner()), "Match HUD must retain a usable keyboard focus target at %s." % str(viewport_size))
+		_test_board_keyboard(board, main, viewport_size)
 		main.call("_unhandled_key_input", _key_event(KEY_ESCAPE))
 		await process_frame
 		await process_frame
@@ -114,6 +116,50 @@ func _count_buttons(node: Node) -> int:
 	for child: Node in node.get_children():
 		count += _count_buttons(child)
 	return count
+
+
+func _test_board_keyboard(board: Control, main: Control, viewport_size: Vector2i) -> void:
+	if board == null:
+		return
+	var match_state: RefCounted = main.get("state") as RefCounted
+	var human_position: Vector2i = (match_state.call("player", 0) as Dictionary).get("position", Vector2i.ZERO) as Vector2i
+	var selected_players: Array[int] = []
+	var selected_cells: Array[Vector2i] = []
+	board.player_selected.connect(func(player_id: int) -> void: selected_players.append(player_id))
+	board.cell_selected.connect(func(position: Vector2i) -> void: selected_cells.append(position))
+	board.call("set_keyboard_cell", human_position)
+	board.grab_focus()
+	board.call("_gui_input", _key_event(KEY_ENTER))
+	_expect(selected_players == [0], "Enter must activate the player under the board cursor at %s." % str(viewport_size))
+	var empty_position: Vector2i = _first_empty_board_cell(match_state)
+	board.call("set_keyboard_cell", empty_position)
+	board.call("_gui_input", _key_event(KEY_ENTER))
+	_expect(selected_cells == [empty_position], "Enter must activate an empty board cell at %s." % str(viewport_size))
+	var before_move: Vector2i = board.get("keyboard_cell") as Vector2i
+	board.call("_gui_input", _key_event(KEY_RIGHT))
+	var expected_x: int = mini(before_move.x + 1, int(match_state.get("board_size")) - 1)
+	_expect((board.get("keyboard_cell") as Vector2i).x == expected_x, "Arrow keys must move the board cursor at %s." % str(viewport_size))
+	var target_ids: Array[int] = [1]
+	board.call("set_interactions", main.get("move_commands") as Dictionary, target_ids)
+	board.call("focus_selection")
+	var opponent_position: Vector2i = (match_state.call("player", 1) as Dictionary).get("position", Vector2i.ZERO) as Vector2i
+	_expect(root.gui_get_focus_owner() == board and board.get("keyboard_cell") == opponent_position, "Target selection must focus the first legal player at %s." % str(viewport_size))
+	main.call("_refresh_interactions")
+
+
+func _first_empty_board_cell(match_state: RefCounted) -> Vector2i:
+	var occupied: Array[Vector2i] = []
+	for player_value: Variant in match_state.get("players") as Array:
+		var player_state: Dictionary = player_value as Dictionary
+		if bool(player_state.get("alive", false)):
+			occupied.append(player_state.get("position", Vector2i.ZERO) as Vector2i)
+	var grid_size: int = int(match_state.get("board_size"))
+	for y: int in grid_size:
+		for x: int in grid_size:
+			var position: Vector2i = Vector2i(x, y)
+			if not occupied.has(position):
+				return position
+	return Vector2i.ZERO
 
 
 func _first_enabled_button(node: Node) -> Button:

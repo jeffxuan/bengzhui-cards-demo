@@ -19,7 +19,7 @@ const COLORS: Dictionary = {
 	"primary": Color("9b315e"),
 	"primary_hover": Color("b33d70"),
 	"gold": Color("e1b94f"),
-	"danger": Color("d85b55"),
+	"danger": Color("e2706a"),
 	"success": Color("62a875")
 }
 const CHARACTER_ORDER: Array[String] = ["q", "k", "shya", "ginger", "zc", "na1", "maddy", "signal"]
@@ -609,6 +609,8 @@ func _select_definition_commands(command_type: String, payload_key: String, defi
 			_submit_human_command(selected_target_commands[0])
 			return
 	_refresh_match_ui()
+	if not selected_target_commands.is_empty():
+		board_view.focus_selection()
 
 
 func _on_board_cell_selected(position: Vector2i) -> void:
@@ -642,7 +644,7 @@ func _submit_end_turn() -> void:
 func _submit_human_command(command: Dictionary) -> void:
 	selected_target_commands.clear()
 	if not bool(state.call("submit_command", command)):
-		log_lines.append("[color=#d85b55]%s[/color]" % String(state.get("last_error")))
+		log_lines.append("[color=#e2706a]%s[/color]" % String(state.get("last_error")))
 	_collect_events()
 	_after_state_change()
 
@@ -653,7 +655,7 @@ func _after_state_change() -> void:
 	if bool(state.get("finished")):
 		SaveServiceScript.clear_replay()
 	elif not SaveServiceScript.save_replay(state.call("replay_document") as Dictionary):
-		log_lines.append("[color=#d85b55]无法写入对局存档；请检查存储空间或目录权限。[/color]")
+		log_lines.append("[color=#e2706a]无法写入对局存档；请检查存储空间或目录权限。[/color]")
 	_refresh_match_ui()
 	_schedule_ai()
 
@@ -686,11 +688,11 @@ func _run_ai_loop() -> void:
 		await get_tree().create_timer(delay).timeout
 		var command: Dictionary = ai_controller.call("choose_command", state, actor_id) as Dictionary
 		if command.is_empty() or not bool(state.call("submit_command", command)):
-			log_lines.append("[color=#d85b55]AI 无法提交合法命令。[/color]")
+			log_lines.append("[color=#e2706a]AI 无法提交合法命令。[/color]")
 			break
 		_collect_events()
 		if not bool(state.get("finished")) and not SaveServiceScript.save_replay(state.call("replay_document") as Dictionary):
-			log_lines.append("[color=#d85b55]无法写入对局存档；请检查存储空间或目录权限。[/color]")
+			log_lines.append("[color=#e2706a]无法写入对局存档；请检查存储空间或目录权限。[/color]")
 		_refresh_match_ui()
 	ai_running = false
 	if state != null and bool(state.get("finished")):
@@ -890,7 +892,7 @@ func _close_settings() -> void:
 		_show_character_select("" if saved else "设置无法保存；请检查存储空间或目录权限。")
 	else:
 		if not saved:
-			log_lines.append("[color=#d85b55]设置无法保存；请检查存储空间或目录权限。[/color]")
+			log_lines.append("[color=#e2706a]设置无法保存；请检查存储空间或目录权限。[/color]")
 		_build_match_screen()
 		_refresh_match_ui()
 
@@ -932,7 +934,7 @@ func _close_tutorial() -> void:
 		_show_character_select("" if saved else "设置无法保存；请检查存储空间或目录权限。")
 	else:
 		if not saved:
-			log_lines.append("[color=#d85b55]设置无法保存；请检查存储空间或目录权限。[/color]")
+			log_lines.append("[color=#e2706a]设置无法保存；请检查存储空间或目录权限。[/color]")
 		_refresh_match_ui()
 
 

@@ -1,0 +1,44 @@
+name: Bug 报告
+description: 报告无法启动、崩溃、规则错误或无法继续的对局
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: severity
+    attributes:
+      label: 严重程度
+      options: ["P0：无法启动、崩溃或存档损坏", "P1：无法继续或胜负错误", "P2：功能异常但可继续", "P3：表现或文字问题"]
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Windows 版本与分辨率
+      placeholder: Windows 11 23H2，1920x1080
+    validations:
+      required: true
+  - type: textarea
+    id: debug
+    attributes:
+      label: 对局调试信息
+      description: 如果游戏能够进入对局，请使用右上角“对局信息”按钮复制并粘贴；如果无法启动，请填写“无法获取”。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: 按顺序列出问题发生前的操作。
+    validations:
+      required: true
+  - type: textarea
+    id: expected_actual
+    attributes:
+      label: 预期与实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: attachments
+    attributes:
+      label: 截图、录屏或安全软件提示
+      description: 可直接拖入文件。请勿附带与问题无关的个人信息。

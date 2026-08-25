@@ -18,6 +18,7 @@ func _init() -> void:
 	_test_discard_phase_and_replay_continuation()
 	_test_extra_action_and_round_pressure()
 	_test_targeting_and_public_history()
+	_test_purchased_cards_persist()
 	if failures.is_empty():
 		print("RULE_TESTS_OK: v4 resources, discard continuations, responses, pressure, targeting, and public history passed.")
 		quit(0)
@@ -139,6 +140,28 @@ func _test_targeting_and_public_history() -> void:
 	_expect(bool(state.call("submit_command", command)), "Previewed attack should resolve.")
 	var history: Array = (state.call("player", 0) as Dictionary).get("public_card_history", []) as Array
 	_expect(history.size() == 1 and String((history[0] as Dictionary).get("card_id", "")) == "slash", "Played cards must be publicly recorded.")
+
+
+func _test_purchased_cards_persist() -> void:
+	var state: RefCounted = _state(["q", "ginger", "maddy", "signal"], 107)
+	var active: Dictionary = state.call("player", 0) as Dictionary
+	active["coins"] = 10
+	active["actions"] = 2
+	state.players[0] = active
+	state.set("market", ["slash", "heavy_slash", "precise_thrust"])
+	var buy: Dictionary = {}
+	for command: Dictionary in state.call("legal_commands", 0) as Array[Dictionary]:
+		if String(command.get("type", "")) == MatchCommandScript.BUY:
+			buy = command
+			break
+	_expect(not buy.is_empty(), "A funded player should be able to buy from the market.")
+	if not buy.is_empty():
+		_expect(bool(state.call("submit_command", buy)), "Market purchase should resolve.")
+		var purchased: Array = (state.call("player", 0) as Dictionary).get("purchased_hand", []) as Array
+		_expect(purchased.size() == 1, "Purchased card must enter the protected purchase reserve.")
+		var end_turn := MatchCommandScript.make(MatchCommandScript.END_TURN, 0)
+		_expect(bool(state.call("submit_command", end_turn)), "Player should be able to end turn with a purchased card reserved.")
+		_expect(((state.call("player", 0) as Dictionary).get("purchased_hand", []) as Array).size() == 1, "Purchased card must persist across turns until played.")
 
 
 func _state(roster: Array[String], seed: int) -> RefCounted:

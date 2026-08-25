@@ -504,7 +504,7 @@ func _refresh_opponents() -> void:
 		var row: Button = Button.new()
 		row.custom_minimum_size.y = 52
 		var status_color: Color = COLORS["muted"] as Color if bool(opponent.get("alive", false)) else COLORS["danger"] as Color
-		row.text = "%s\nHP %d/%d · 护 %d · 手牌 %d" % [String(opponent.get("name", "")), int(opponent.get("health", 0)), int(opponent.get("max_health", 0)), int(opponent.get("armor", 0)), (opponent.get("hand", []) as Array).size()]
+		row.text = "%s\nHP %d/%d · 护 %d · 手牌 %d" % [String(opponent.get("name", "")), int(opponent.get("health", 0)), int(opponent.get("max_health", 0)), int(opponent.get("armor", 0)), (opponent.get("hand", []) as Array).size() + (opponent.get("purchased_hand", []) as Array).size()]
 		row.modulate = status_color
 		row.tooltip_text = "点击查看最近5张公开出牌"
 		row.pressed.connect(_show_player_history.bind(player_id))
@@ -515,13 +515,18 @@ func _refresh_hand() -> void:
 	_clear_children(hand_box)
 	var human: Dictionary = state.call("player", 0) as Dictionary
 	var legal: Array[Dictionary] = state.call("legal_commands", 0) as Array[Dictionary]
-	for card_value: Variant in human.get("hand", []) as Array:
+	var display_hand: Array = (human.get("hand", []) as Array).duplicate()
+	var purchased_count: int = (human.get("purchased_hand", []) as Array).size()
+	display_hand.append_array(human.get("purchased_hand", []) as Array)
+	for card_index: int in display_hand.size():
+		var card_value: Variant = display_hand[card_index]
 		var card_id: String = String(card_value)
 		var definition: Dictionary = catalog.call("card", card_id) as Dictionary
 		var button: Button = Button.new()
 		button.custom_minimum_size = Vector2(260, 94)
 		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		button.text = "%s\n%s · %s\n%s" % [String(definition.get("name", card_id)), _cost_text(definition), _range_text(definition), _short_text(String(definition.get("description", "")), 28)]
+		var source_label: String = " · 商店保留" if card_index >= display_hand.size() - purchased_count else ""
+		button.text = "%s%s\n%s · %s\n%s" % [String(definition.get("name", card_id)), source_label, _cost_text(definition), _range_text(definition), _short_text(String(definition.get("description", "")), 28)]
 		button.icon = _category_icon(String(definition.get("category", "")))
 		button.tooltip_text = "%s\n%s\n%s" % [String(definition.get("name", card_id)), _cost_text(definition), String(definition.get("description", ""))]
 		button.disabled = not _has_definition_command(legal, MatchCommandScript.PLAY_CARD, card_id)

@@ -310,6 +310,7 @@ func deterministic_snapshot() -> Dictionary:
 			"coins": int(player_state["coins"]),
 			"position": _position_payload(player_state["position"] as Vector2i),
 			"hand": (player_state["hand"] as Array).duplicate(),
+			"purchased_hand": (player_state.get("purchased_hand", []) as Array).duplicate(),
 			"deck": (player_state["deck"] as Array).duplicate(),
 			"discard": (player_state["discard"] as Array).duplicate(),
 			"statuses": (player_state["statuses"] as Dictionary).duplicate(true),
@@ -397,6 +398,7 @@ func _create_players(roster: Array[String]) -> void:
 			"market_bought": false,
 			"position": position,
 			"hand": [],
+			"purchased_hand": [],
 			"deck": deck,
 			"discard": [],
 			"statuses": {},
@@ -522,7 +524,9 @@ func _legal_card_commands(actor_id: int) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	var active: Dictionary = players[actor_id]
 	var seen: Dictionary = {}
-	for card_value: Variant in active.get("hand", []) as Array:
+	var available_cards: Array = (active.get("hand", []) as Array).duplicate()
+	available_cards.append_array(active.get("purchased_hand", []) as Array)
+	for card_value: Variant in available_cards:
 		var card_id: String = String(card_value)
 		if seen.has(card_id):
 			continue
@@ -612,7 +616,8 @@ func _handle_play_card(payload: Dictionary) -> void:
 	var target_id: int = int(payload.get("target_id", actor_id))
 	var definition: Dictionary = catalog.call("card", card_id) as Dictionary
 	var active: Dictionary = players[actor_id]
-	_remove_first(active.get("hand", []) as Array, card_id)
+	if not _remove_first(active.get("hand", []) as Array, card_id):
+		_remove_first(active.get("purchased_hand", []) as Array, card_id)
 	_pay_cost(actor_id, definition)
 	active = players[actor_id]
 	_change_actions(actor_id, -1, card_id)
@@ -693,7 +698,8 @@ func _handle_response(payload: Dictionary) -> void:
 		return
 	var definition: Dictionary = catalog.call("card", card_id) as Dictionary
 	var responder: Dictionary = players[responder_id]
-	_remove_first(responder.get("hand", []) as Array, card_id)
+	if not _remove_first(responder.get("hand", []) as Array, card_id):
+		_remove_first(responder.get("purchased_hand", []) as Array, card_id)
 	players[responder_id] = responder
 	_pay_cost(responder_id, definition)
 	responder = players[responder_id]
@@ -739,7 +745,7 @@ func _handle_buy(payload: Dictionary) -> void:
 	if String(definition.get("category", "")) == "equipment":
 		_equip(actor_id, card_id)
 	else:
-		(active.get("hand", []) as Array).append(card_id)
+		(active.get("purchased_hand", []) as Array).append(card_id)
 	_replenish_market()
 	_emit("market_bought", {"player_id": actor_id, "card_id": card_id, "message": "%s 购买【%s】。" % [String(active.get("name", "")), String(definition.get("name", card_id))]})
 
@@ -1000,7 +1006,9 @@ func _event_choice_is_legal(active: Dictionary, choice: Dictionary) -> bool:
 func _valid_response_cards(player_id: int, action_category: String) -> Array[String]:
 	var result: Array[String] = []
 	var seen: Dictionary = {}
-	for card_value: Variant in players[player_id].get("hand", []) as Array:
+	var available_cards: Array = (players[player_id].get("hand", []) as Array).duplicate()
+	available_cards.append_array(players[player_id].get("purchased_hand", []) as Array)
+	for card_value: Variant in available_cards:
 		var card_id: String = String(card_value)
 		if seen.has(card_id):
 			continue

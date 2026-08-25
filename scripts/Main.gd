@@ -38,6 +38,7 @@ var log_lines: Array[String] = []
 var ai_running: bool = false
 var settings_open: bool = false
 var character_buttons: Dictionary = {}
+var discard_selected_indices: Array[int] = []
 
 var screen_root: Control
 var character_detail_label: Label
@@ -45,7 +46,7 @@ var start_button: Button
 var board_view: BoardView
 var summary_label: Label
 var action_hint_label: Label
-var resources_box: HBoxContainer
+var resources_box: GridContainer
 var status_box: HFlowContainer
 var skill_box: VBoxContainer
 var market_box: VBoxContainer
@@ -94,7 +95,10 @@ func _run_export_smoke() -> void:
 	while not bool(smoke_state.get("finished")) and command_count < 500:
 		var actor_id: int
 		var pending_action: Dictionary = smoke_state.get("pending_action") as Dictionary
-		if pending_action.is_empty():
+		var pending_discard: Dictionary = smoke_state.get("pending_discard") as Dictionary
+		if not pending_discard.is_empty():
+			actor_id = int(pending_discard.get("player_id", -1))
+		elif pending_action.is_empty():
 			actor_id = int((smoke_state.call("current_player") as Dictionary).get("id", -1))
 		else:
 			actor_id = int(pending_action.get("responder_id", -1))
@@ -340,7 +344,8 @@ func _build_left_sidebar() -> Control:
 	box.add_theme_constant_override("separation", 10)
 	panel.add_child(box)
 	box.add_child(_section_label("你的状态"))
-	resources_box = HBoxContainer.new()
+	resources_box = GridContainer.new()
+	resources_box.columns = 3
 	resources_box.add_theme_constant_override("separation", 8)
 	box.add_child(resources_box)
 	status_box = HFlowContainer.new()
@@ -464,6 +469,7 @@ func _refresh_resources() -> void:
 	_clear_children(resources_box)
 	var human: Dictionary = state.call("player", 0) as Dictionary
 	resources_box.add_child(_resource_chip("res://assets/third_party/lucide/heart.svg", "%d/%d" % [int(human.get("health", 0)), int(human.get("max_health", 0))], "生命"))
+	resources_box.add_child(_resource_chip("res://assets/third_party/lucide/swords.svg", "%d/%d" % [int(human.get("stamina", 0)), int(human.get("max_stamina", 0))], "体力；回合外视为0"))
 	resources_box.add_child(_resource_chip("res://assets/third_party/lucide/shield.svg", str(int(human.get("armor", 0))), "护甲"))
 	resources_box.add_child(_resource_chip("res://assets/third_party/lucide/zap.svg", "%d/%d" % [int(human.get("mana", 0)), int(human.get("max_mana", 0))], "法力"))
 	resources_box.add_child(_resource_chip("res://assets/third_party/lucide/coins.svg", str(int(human.get("coins", 0))), "金币"))
@@ -495,15 +501,13 @@ func _refresh_opponents() -> void:
 	_clear_children(opponents_box)
 	for player_id: int in range(1, 4):
 		var opponent: Dictionary = state.call("player", player_id) as Dictionary
-		var row: HBoxContainer = HBoxContainer.new()
-		row.custom_minimum_size.y = 38
+		var row: Button = Button.new()
+		row.custom_minimum_size.y = 52
 		var status_color: Color = COLORS["muted"] as Color if bool(opponent.get("alive", false)) else COLORS["danger"] as Color
-		var name_label: Label = _label(String(opponent.get("name", "")), 15, status_color)
-		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(name_label)
-		var stats: Label = _label("HP %d/%d  护 %d  牌 %d" % [int(opponent.get("health", 0)), int(opponent.get("max_health", 0)), int(opponent.get("armor", 0)), (opponent.get("hand", []) as Array).size()], 13, COLORS["muted"] as Color)
-		stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		row.add_child(stats)
+		row.text = "%s\nHP %d/%d · 护 %d · 手牌 %d" % [String(opponent.get("name", "")), int(opponent.get("health", 0)), int(opponent.get("max_health", 0)), int(opponent.get("armor", 0)), (opponent.get("hand", []) as Array).size()]
+		row.modulate = status_color
+		row.tooltip_text = "点击查看最近5张公开出牌"
+		row.pressed.connect(_show_player_history.bind(player_id))
 		opponents_box.add_child(row)
 
 
@@ -517,7 +521,7 @@ func _refresh_hand() -> void:
 		var button: Button = Button.new()
 		button.custom_minimum_size = Vector2(260, 94)
 		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		button.text = "%s\n%s\n%s" % [String(definition.get("name", card_id)), _cost_text(definition), _short_text(String(definition.get("description", "")), 28)]
+		button.text = "%s\n%s · %s\n%s" % [String(definition.get("name", card_id)), _cost_text(definition), _range_text(definition), _short_text(String(definition.get("description", "")), 28)]
 		button.icon = _category_icon(String(definition.get("category", "")))
 		button.tooltip_text = "%s\n%s\n%s" % [String(definition.get("name", card_id)), _cost_text(definition), String(definition.get("description", ""))]
 		button.disabled = not _has_definition_command(legal, MatchCommandScript.PLAY_CARD, card_id)
@@ -536,7 +540,7 @@ func _refresh_skills() -> void:
 		var button: Button = Button.new()
 		button.custom_minimum_size.y = 54
 		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		button.text = "%s · %s\n%s" % [String(skill.get("name", skill_id)), _cost_text(skill), _short_text(String(skill.get("description", "")), 20)]
+		button.text = "%s · 消耗1行动 · 无资源消耗 · %s\n%s" % [String(skill.get("name", skill_id)), _range_text(skill), _short_text(String(skill.get("description", "")), 20)]
 		button.icon = load("res://assets/third_party/lucide/sparkles.svg") as Texture2D
 		button.tooltip_text = String(skill.get("description", ""))
 		button.disabled = not _has_definition_command(legal, MatchCommandScript.USE_SKILL, skill_id)
@@ -585,6 +589,15 @@ func _refresh_interactions() -> void:
 			if target_id >= 0 and not legal_targets.has(target_id):
 				legal_targets.append(target_id)
 	board_view.set_interactions(move_commands, legal_targets)
+	if selected_target_commands.is_empty():
+		board_view.set_range_preview([])
+	else:
+		var preview_command: Dictionary = selected_target_commands[0]
+		var preview_payload: Dictionary = preview_command.get("payload", {}) as Dictionary
+		var preview_type: String = String(preview_command.get("type", ""))
+		var preview_id: String = String(preview_payload.get("card_id", preview_payload.get("skill_id", "")))
+		var preview: Dictionary = state.call("targeting_preview", 0, preview_type, preview_id) as Dictionary
+		board_view.set_range_preview(preview.get("cells", []) as Array[Vector2i])
 	var end_command: Dictionary = MatchCommandScript.make(MatchCommandScript.END_TURN, 0)
 	end_turn_button.disabled = not (state.call("legal_commands", 0) as Array).has(end_command)
 
@@ -624,10 +637,13 @@ func _on_board_cell_selected(position: Vector2i) -> void:
 func _on_board_player_selected(player_id: int) -> void:
 	if settings_open:
 		return
+	if player_id == 0:
+		return
 	for command: Dictionary in selected_target_commands:
 		if int((command.get("payload", {}) as Dictionary).get("target_id", -1)) == player_id:
 			_submit_human_command(command)
 			return
+	_show_player_history(player_id)
 
 
 func _buy_market(market_index: int) -> void:
@@ -706,6 +722,9 @@ func _required_actor_id() -> int:
 	var pending_action: Dictionary = state.get("pending_action") as Dictionary
 	if not pending_action.is_empty():
 		return int(pending_action.get("responder_id", -1))
+	var pending_discard: Dictionary = state.get("pending_discard") as Dictionary
+	if not pending_discard.is_empty():
+		return int(pending_discard.get("player_id", -1))
 	return int((state.call("current_player") as Dictionary).get("id", -1))
 
 
@@ -741,6 +760,30 @@ func _refresh_blocking_modal() -> void:
 	if modal_layer == null or settings_open:
 		return
 	_clear_children(modal_actions)
+	var pending_discard: Dictionary = state.get("pending_discard") as Dictionary
+	if not pending_discard.is_empty() and _required_actor_id() == 0:
+		modal_layer.visible = true
+		var required_count: int = int(pending_discard.get("required_count", 0))
+		modal_title.text = "选择弃牌"
+		modal_description.text = "请选择%d张牌弃置。已选 %d/%d" % [required_count, discard_selected_indices.size(), required_count]
+		var human: Dictionary = state.call("player", 0) as Dictionary
+		var hand: Array = human.get("hand", []) as Array
+		for index: int in hand.size():
+			var card_id: String = String(hand[index])
+			var definition: Dictionary = catalog.call("card", card_id) as Dictionary
+			var card_button: CheckButton = CheckButton.new()
+			card_button.text = "%s · %s" % [String(definition.get("name", card_id)), _range_text(definition)]
+			card_button.tooltip_text = String(definition.get("description", ""))
+			card_button.button_pressed = discard_selected_indices.has(index)
+			card_button.disabled = not card_button.button_pressed and discard_selected_indices.size() >= required_count
+			card_button.pressed.connect(_toggle_discard_selection.bind(index))
+			modal_actions.add_child(card_button)
+		var confirm: Button = Button.new()
+		confirm.text = "确认弃置 %d 张" % discard_selected_indices.size()
+		confirm.disabled = discard_selected_indices.size() != required_count
+		confirm.pressed.connect(_confirm_discard)
+		modal_actions.add_child(confirm)
+		return
 	if bool(state.get("finished")):
 		modal_layer.visible = true
 		modal_title.text = "对局结算"
@@ -781,6 +824,59 @@ func _refresh_blocking_modal() -> void:
 			modal_actions.add_child(button)
 		return
 	modal_layer.visible = false
+
+
+func _toggle_discard_selection(index: int) -> void:
+	if discard_selected_indices.has(index):
+		discard_selected_indices.erase(index)
+	else:
+		discard_selected_indices.append(index)
+	_refresh_blocking_modal()
+
+
+func _confirm_discard() -> void:
+	var pending_discard: Dictionary = state.get("pending_discard") as Dictionary
+	var hand: Array = (state.call("player", 0) as Dictionary).get("hand", []) as Array
+	var card_ids: Array[String] = []
+	for index: int in discard_selected_indices:
+		if index >= 0 and index < hand.size():
+			card_ids.append(String(hand[index]))
+	var command: Dictionary = MatchCommandScript.make(MatchCommandScript.DISCARD_CARDS, 0, {
+		"request_id": String(pending_discard.get("request_id", "")),
+		"card_ids": card_ids
+	})
+	discard_selected_indices.clear()
+	_submit_human_command(command)
+
+
+func _show_player_history(player_id: int) -> void:
+	if state == null or player_id < 0:
+		return
+	settings_open = true
+	modal_layer.visible = true
+	_clear_children(modal_actions)
+	var player_state: Dictionary = state.call("player", player_id) as Dictionary
+	modal_title.text = "%s 的公开出牌" % String(player_state.get("name", "未知"))
+	modal_description.text = "只显示最近5张已经公开打出的牌。"
+	for entry_value: Variant in player_state.get("public_card_history", []) as Array:
+		var entry: Dictionary = entry_value as Dictionary
+		var definition: Dictionary = catalog.call("card", String(entry.get("card_id", ""))) as Dictionary
+		var line: Label = _label("第%d轮 · %s · %s\n%s" % [int(entry.get("round", 0)), String(definition.get("name", entry.get("card_id", ""))), _range_text(definition), String(definition.get("description", ""))], 14, COLORS["ink"] as Color)
+		line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		modal_actions.add_child(line)
+	if modal_actions.get_child_count() == 0:
+		modal_actions.add_child(_label("暂无公开出牌记录。", 14, COLORS["muted"] as Color))
+	var close_button: Button = Button.new()
+	close_button.text = "返回对局"
+	close_button.pressed.connect(_close_debug_info)
+	modal_actions.add_child(close_button)
+
+
+func _range_text(definition: Dictionary) -> String:
+	var target: String = String(definition.get("target", "self"))
+	if target == "self":
+		return "自身"
+	return "距离%d" % int(definition.get("range", 0))
 
 
 func _open_settings() -> void:
@@ -917,7 +1013,7 @@ func _open_tutorial() -> void:
 	settings_open = true
 	modal_layer.visible = true
 	modal_title.text = "回合规则"
-	modal_description.text = "15x15 棋盘只在玩家被击败后缩至 11x11、7x7。\n回合开始恢复资源，第二轮起抽2张；每回合有1次免费移动和2个行动。\n第5轮起单体伤害提高，第7轮再次提高；范围伤害不受影响。\n红框是可达格，金框是当前可选目标。"
+	modal_description.text = "15x15 棋盘只在玩家被击败后缩至 11x11、7x7。\n回合开始恢复体力和法力，回合外资源为0；角色技能不消耗资源。每回合有1次免费移动和2个行动。\n手牌上限为当前生命值减2，最低保留1张，超出时自行选择弃牌。\n第5轮起单体伤害提高，第7轮再次提高；范围伤害不受影响。\n只剩一名角色时立即获胜；同时全灭按淘汰数、生命比例、伤害、护甲、手牌依次裁定。\n红框是可达格，金框是攻击范围和可选目标。点击对手可查看最近5张公开出牌。"
 	_clear_children(modal_actions)
 	var close_button: Button = Button.new()
 	close_button.text = "进入对局" if state != null else "返回角色选择"

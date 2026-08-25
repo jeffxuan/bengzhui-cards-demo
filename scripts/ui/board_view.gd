@@ -16,6 +16,7 @@ const TILE_COLORS: Dictionary = {
 var state: RefCounted
 var move_commands: Dictionary = {}
 var target_ids: Array[int] = []
+var range_cells: Array[Vector2i] = []
 var hovered_cell: Vector2i = Vector2i(-1, -1)
 var keyboard_cell: Vector2i = Vector2i(-1, -1)
 var font: Font
@@ -38,6 +39,11 @@ func set_interactions(legal_moves: Dictionary, legal_targets: Array[int]) -> voi
 	move_commands = legal_moves.duplicate(true)
 	target_ids = legal_targets.duplicate()
 	_ensure_keyboard_cell()
+	queue_redraw()
+
+
+func set_range_preview(cells: Array[Vector2i]) -> void:
+	range_cells = cells.duplicate()
 	queue_redraw()
 
 
@@ -84,6 +90,8 @@ func _draw() -> void:
 			var destination_key: String = "%d:%d" % [x, y]
 			if move_commands.has(destination_key):
 				draw_rect(rect.grow(-3.0), Color("d94f76"), false, 3.0)
+			if range_cells.has(position):
+				draw_rect(rect.grow(-5.0), Color("e1b94f"), false, 2.0)
 			if has_focus() and position == keyboard_cell:
 				draw_rect(rect.grow(-6.0), Color("f3c75f"), false, 2.0)
 			_draw_tile_marker(kind, rect, cell_size)

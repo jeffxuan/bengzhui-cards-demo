@@ -1,12 +1,12 @@
 {
-  "version": 2,
+  "version": 3,
   "characters": [
     {
       "id": "q",
       "name_key": "character.q",
       "name": "Q",
       "profession": "arcanist",
-      "health": 8,
+      "health": 7,
       "stamina": 2,
       "mana": 2,
       "ai_persona": "control",
@@ -22,7 +22,7 @@
           "name": "观星",
           "cost": {
             "stamina": 0,
-            "mana": 2
+            "mana": 0
           },
           "target": "self",
           "range": 0,
@@ -47,8 +47,8 @@
           "id": "q_thunder_call",
           "name": "唤雷",
           "cost": {
-            "stamina": 1,
-            "mana": 1
+            "stamina": 0,
+            "mana": 0
           },
           "target": "enemy",
           "range": 3,
@@ -112,7 +112,7 @@
           "name": "大脑洞",
           "cost": {
             "stamina": 0,
-            "mana": 2
+            "mana": 0
           },
           "target": "self",
           "range": 0,
@@ -140,7 +140,7 @@
           "name": "灵感风暴",
           "cost": {
             "stamina": 0,
-            "mana": 2
+            "mana": 0
           },
           "target": "self",
           "range": 0,
@@ -186,7 +186,7 @@
       "name_key": "character.shya",
       "name": "Shya",
       "profession": "trickster",
-      "health": 8,
+      "health": 7,
       "stamina": 2,
       "mana": 2,
       "ai_persona": "control",
@@ -202,7 +202,7 @@
           "name": "耀眼闪光",
           "cost": {
             "stamina": 0,
-            "mana": 1
+            "mana": 0
           },
           "target": "enemy",
           "range": 3,
@@ -224,8 +224,8 @@
           "id": "shya_flash_break",
           "name": "闪光破裂",
           "cost": {
-            "stamina": 1,
-            "mana": 2
+            "stamina": 0,
+            "mana": 0
           },
           "target": "enemy",
           "range": 2,
@@ -283,7 +283,7 @@
           "id": "ginger_fist_way",
           "name": "拳道",
           "cost": {
-            "stamina": 1,
+            "stamina": 0,
             "mana": 0
           },
           "target": "enemy",
@@ -302,7 +302,7 @@
           "id": "ginger_guard_up",
           "name": "架势",
           "cost": {
-            "stamina": 1,
+            "stamina": 0,
             "mana": 0
           },
           "target": "self",
@@ -350,7 +350,7 @@
       "name_key": "character.zc",
       "name": "Z&C",
       "profession": "stalker",
-      "health": 10,
+      "health": 9,
       "stamina": 2,
       "mana": 2,
       "ai_persona": "offense",
@@ -365,7 +365,7 @@
           "id": "zc_madness",
           "name": "狂极",
           "cost": {
-            "stamina": 1,
+            "stamina": 0,
             "mana": 0
           },
           "target": "enemy",
@@ -390,7 +390,7 @@
           "name": "毒雾扩散",
           "cost": {
             "stamina": 0,
-            "mana": 1
+            "mana": 0
           },
           "target": "all_enemies_in_range",
           "range": 1,
@@ -433,7 +433,7 @@
       "name_key": "character.na1",
       "name": "Na1",
       "profession": "trickster",
-      "health": 8,
+      "health": 9,
       "stamina": 2,
       "mana": 2,
       "ai_persona": "resource",
@@ -449,7 +449,7 @@
           "name": "远见",
           "cost": {
             "stamina": 0,
-            "mana": 1
+            "mana": 0
           },
           "target": "self",
           "range": 0,
@@ -470,8 +470,8 @@
           "id": "na1_free_spirit",
           "name": "自由之意",
           "cost": {
-            "stamina": 1,
-            "mana": 1
+            "stamina": 0,
+            "mana": 0
           },
           "target": "self",
           "range": 0,
@@ -523,7 +523,7 @@
       "name_key": "character.maddy",
       "name": "Maddy",
       "profession": "vanguard",
-      "health": 9,
+      "health": 8,
       "stamina": 2,
       "mana": 1,
       "ai_persona": "resource",
@@ -560,8 +560,8 @@
           "id": "maddy_reclamation",
           "name": "围垦",
           "cost": {
-            "stamina": 1,
-            "mana": 1
+            "stamina": 0,
+            "mana": 0
           },
           "target": "enemy",
           "range": 2,
@@ -620,7 +620,7 @@
           "name": "调频",
           "cost": {
             "stamina": 0,
-            "mana": 2
+            "mana": 0
           },
           "target": "enemy",
           "range": 3,
@@ -644,7 +644,7 @@
           "name": "导航推进",
           "cost": {
             "stamina": 0,
-            "mana": 2
+            "mana": 0
           },
           "target": "self",
           "range": 0,

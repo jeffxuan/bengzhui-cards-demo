@@ -129,7 +129,9 @@ func _validate_cards() -> void:
 		for key: String in ["name_key", "name", "category", "profession", "cost", "price", "target", "range", "effects", "tags", "description"]:
 			if not card_definition.has(key):
 				validation_errors.append("Card %s is missing %s." % [card_id, key])
-		_validate_effects(card_definition.get("effects", []), "card %s" % card_id)
+			_validate_effects(card_definition.get("effects", []), "card %s" % card_id)
+			if String(card_definition.get("category", "")) == "response" and not ["heavenly_sense", "shrug_off"].has(card_id):
+				validation_errors.append("Response card %s is not allowed in v4." % card_id)
 
 
 func _validate_characters() -> void:
@@ -156,6 +158,9 @@ func _validate_characters() -> void:
 					if not skill_definition.has(key):
 						validation_errors.append("Skill %s is missing %s." % [skill_id, key])
 				_validate_effects(skill_definition.get("effects", []), "skill %s" % String(skill_definition.get("id", "unknown")))
+				var skill_cost: Dictionary = skill_definition.get("cost", {}) as Dictionary
+				if int(skill_cost.get("stamina", -1)) != 0 or int(skill_cost.get("mana", -1)) != 0:
+					validation_errors.append("Character skill %s must have zero resource cost." % skill_id)
 
 
 func _validate_events() -> void:

@@ -1,9 +1,8 @@
 {
-  "version": 3,
+  "version": 4,
   "board_size": 15,
   "collapse_mode": "elimination",
   "collapse_sizes": [15, 11, 7],
-  "round_limit": 8,
   "duel_pressure": [
     {"start_round": 5, "single_target_damage_bonus": 1},
     {"start_round": 7, "single_target_damage_bonus": 2}

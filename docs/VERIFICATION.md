@@ -1,5 +1,13 @@
 # 本地验证记录
 
+## 2026-08-25 · dev.2 v4 规则回归
+
+- Godot 4.6.3 编译、规则、存档、三分辨率 UI 与导出冒烟通过。
+- 修复主动玩家在结算中死亡后重复创建弃牌请求的死锁；1000 局固定模拟无非法命令、死循环或无效赢家。
+- v4 仅保留 `last_survivor` / `simultaneous_wipe` 胜因，15→11→7 仅在淘汰时崩坠，回合 5/7 决胜伤害持续生效。
+- dev.2 模拟输出会记录胜率、出牌伤害、结束轮数、命令数和每名角色的出现次数。当前开发预警范围为 35–65；公开候选版仍需通过 42–58 并完成真人测试。
+- dev.2 导出物：Windows x86_64 `BengzhuiCards.exe`，112 MiB，SHA-256 `b3a559864a336d14eb9530b78e2e94381fb94be1d7d984b3909ab7a5a4172d6a`；macOS universal `BengzhuiCards.zip`，69 MiB，SHA-256 `75006434694097d945cdc0cb76a627975a6d4d381d945c14f69c5adbc2fd20a3`。Windows 真机和 macOS 本机整局仍是发布前人工门槛。
+
 ## 2026-08-24 · 棋盘键盘操作与界面审计
 
 环境：Godot 4.6.3 stable，Apple M4，规则版本 3，内容版本 2，分支 `codex/public-demo`。

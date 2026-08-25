@@ -8,6 +8,8 @@ func choose_command(state: RefCounted, actor_id: int) -> Dictionary:
 	var commands: Array[Dictionary] = state.call("legal_commands", actor_id) as Array[Dictionary]
 	if commands.is_empty():
 		return {}
+	if String(commands[0].get("type", "")) == MatchCommandScript.DISCARD_CARDS:
+		return _choose_discard_command(state, actor_id, commands[0].get("payload", {}) as Dictionary)
 	var persona: String = String((state.call("player", actor_id) as Dictionary).get("ai_persona", "control"))
 	var best_command: Dictionary = commands[0]
 	var best_score: float = -1000000.0
@@ -38,6 +40,34 @@ func _score_command(state: RefCounted, actor_id: int, command: Dictionary, perso
 		MatchCommandScript.END_TURN:
 			return -100.0
 	return -1000.0
+
+
+func _choose_discard_command(state: RefCounted, actor_id: int, payload: Dictionary) -> Dictionary:
+	var required_count: int = int(payload.get("required_count", 0))
+	var hand: Array = (state.call("player", actor_id) as Dictionary).get("hand", []) as Array
+	var scored: Array[Dictionary] = []
+	var catalog: RefCounted = state.get("catalog") as RefCounted
+	for index: int in hand.size():
+		var card_id: String = String(hand[index])
+		var definition: Dictionary = catalog.call("card", card_id) as Dictionary
+		var score: float = float(definition.get("price", 0))
+		if String(definition.get("category", "")) == "equipment":
+			score += 4.0
+		elif String(definition.get("category", "")) == "attack":
+			score += 2.0
+		scored.append({"id": card_id, "score": score, "index": index})
+	scored.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if float(a.get("score", 0.0)) == float(b.get("score", 0.0)):
+			return int(a.get("index", 0)) < int(b.get("index", 0))
+		return float(a.get("score", 0.0)) < float(b.get("score", 0.0))
+	)
+	var selected: Array[String] = []
+	for entry: Dictionary in scored.slice(0, mini(required_count, scored.size())):
+		selected.append(String(entry.get("id", "")))
+	return MatchCommandScript.make(MatchCommandScript.DISCARD_CARDS, actor_id, {
+		"request_id": String(payload.get("request_id", "")),
+		"card_ids": selected
+	})
 
 
 func _score_event_choice(state: RefCounted, payload: Dictionary) -> float:
@@ -139,4 +169,13 @@ func _score_definition(state: RefCounted, actor_id: int, payload: Dictionary, is
 			score -= amount * 5.0
 	if String(definition.get("category", "")) == "equipment":
 		score += 10.0
+	# Keep the deterministic showcase AI from over-selecting the strongest
+	# burst kits while still making the economy/support characters act on
+	# their distinctive opportunities. This is AI policy, not rule logic.
+	var character_id: String = String(actor.get("character_id", ""))
+	match character_id:
+		"q": score -= 8.0
+		"k": score -= 10.0
+		"na1": score += 7.0
+		"signal": score += 7.0
 	return score

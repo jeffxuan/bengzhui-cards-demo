@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "statuses": [
     {"id":"paralyze","name_key":"status.paralyze","name":"麻痹","max_stacks":1,"timing":"turn_start","duration":"until_next_turn_start","clear":"结算后清除，或被净化。","description":"下回合不能免费移动。"},
     {"id":"bleed","name_key":"status.bleed","name":"流血","max_stacks":3,"timing":"turn_start","duration":"stack_count","clear":"每次结算减1层，或被净化。","description":"回合开始受到1点真实伤害并减少1层。"},

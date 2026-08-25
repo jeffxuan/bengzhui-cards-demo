@@ -14,7 +14,6 @@ var seed: int
 var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var event_deck: RefCounted
 var board_size: int
-var round_limit: int
 var max_collapses: int
 var collapse_sizes: Array[int] = []
 var hand_limit: int
@@ -26,6 +25,8 @@ var completed_rounds: int = 0
 var collapse_count: int = 0
 var pending_action: Dictionary = {}
 var pending_event: Dictionary = {}
+var pending_discard: Dictionary = {}
+var discard_continuation: Dictionary = {}
 var last_event: Dictionary = {}
 var market: Array[String] = []
 var market_deck: Array[String] = []
@@ -52,7 +53,6 @@ func _init(rule_values: Dictionary, content_catalog: RefCounted, roster: Array[S
 	seed = match_seed
 	rng.seed = seed
 	board_size = int(rules.get("board_size", 9))
-	round_limit = int(rules.get("round_limit", 0))
 	for size_value: Variant in rules.get("collapse_sizes", [board_size]) as Array:
 		collapse_sizes.append(int(size_value))
 	if collapse_sizes.is_empty() or collapse_sizes[0] != board_size:
@@ -82,6 +82,24 @@ func player(player_id: int) -> Dictionary:
 	if player_id < 0 or player_id >= players.size():
 		return {}
 	return players[player_id]
+
+
+func targeting_preview(actor_id: int, command_type: String, definition_id: String) -> Dictionary:
+	var definition: Dictionary
+	if command_type == MatchCommandScript.PLAY_CARD:
+		definition = catalog.call("card", definition_id) as Dictionary
+	else:
+		definition = _skill_definition(actor_id, definition_id)
+	var source: Vector2i = players[actor_id].get("position", Vector2i.ZERO) as Vector2i
+	var range_limit: int = _definition_range(actor_id, definition)
+	var cells: Array[Vector2i] = []
+	if String(definition.get("target", "self")) != "self":
+		for y: int in range(active_bounds().position.y, active_bounds().end.y):
+			for x: int in range(active_bounds().position.x, active_bounds().end.x):
+				var cell := Vector2i(x, y)
+				if absi(cell.x - source.x) + absi(cell.y - source.y) <= range_limit:
+					cells.append(cell)
+	return {"range": range_limit, "cells": cells}
 
 
 func active_bounds() -> Rect2i:
@@ -128,6 +146,8 @@ func submit_command(command: Dictionary) -> bool:
 			_handle_event_choice(payload)
 		MatchCommandScript.END_TURN:
 			_handle_end_turn()
+		MatchCommandScript.DISCARD_CARDS:
+			_handle_discard_cards(payload)
 	_settle_eliminations(tiebreak_snapshot)
 	if not finished and pending_action.is_empty() and pending_event.is_empty() and not bool(current_player().get("alive", false)):
 		var followup_snapshot: Array[Dictionary] = _capture_tiebreak_snapshot(_alive_player_ids())
@@ -139,6 +159,14 @@ func submit_command(command: Dictionary) -> bool:
 func legal_commands(actor_id: int = -1) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	if finished or players.is_empty():
+		return result
+	if not pending_discard.is_empty():
+		var discard_actor: int = int(pending_discard.get("player_id", -1))
+		if actor_id < 0 or actor_id == discard_actor:
+			result.append(MatchCommandScript.make(MatchCommandScript.DISCARD_CARDS, discard_actor, {
+				"request_id": String(pending_discard.get("request_id", "")),
+				"required_count": int(pending_discard.get("required_count", 0))
+			}))
 		return result
 	if not pending_action.is_empty():
 		var responder_id: int = int(pending_action.get("responder_id", -1))
@@ -173,6 +201,89 @@ func drain_events() -> Array[Dictionary]:
 	var drained: Array[Dictionary] = recent_events.duplicate(true)
 	recent_events.clear()
 	return drained
+
+
+func _validate_discard_payload(payload: Dictionary) -> String:
+	if String(payload.get("request_id", "")) != String(pending_discard.get("request_id", "")):
+		return "弃牌请求已经失效。"
+	var selected: Array = payload.get("card_ids", []) as Array
+	var required_count: int = int(pending_discard.get("required_count", 0))
+	if selected.size() != required_count:
+		return "必须选择%d张牌。" % required_count
+	var available: Array = players[int(pending_discard.get("player_id", -1))].get("hand", []) as Array
+	var remaining: Array = available.duplicate()
+	for card_value: Variant in selected:
+		var card_id: String = String(card_value)
+		var index: int = remaining.find(card_id)
+		if index < 0:
+			return "选择的牌不在当前手牌中。"
+		remaining.remove_at(index)
+	return ""
+
+
+func _request_discard(player_id: int, amount: int, reason_id: String, continuation: Dictionary = {}) -> bool:
+	var hand: Array = players[player_id].get("hand", []) as Array
+	var required_count: int = mini(maxi(0, amount), hand.size())
+	if required_count <= 0:
+		return false
+	pending_discard = {
+		"request_id": "%d:%d:%s" % [command_log.size(), player_id, reason_id],
+		"player_id": player_id,
+		"required_count": required_count,
+		"reason_id": reason_id
+	}
+	discard_continuation = continuation.duplicate(true)
+	_emit("discard_requested", {
+		"player_id": player_id,
+		"required_count": required_count,
+		"reason_id": reason_id,
+		"message": "%s 请选择%d张牌弃置。" % [String(players[player_id].get("name", "")), required_count]
+	})
+	return true
+
+
+func _handle_discard_cards(payload: Dictionary) -> void:
+	var player_id: int = int(pending_discard.get("player_id", -1))
+	var reason_id: String = String(pending_discard.get("reason_id", "effect"))
+	var selected: Array = payload.get("card_ids", []) as Array
+	var discarded: Array[String] = []
+	var hand: Array = players[player_id].get("hand", []) as Array
+	var discard: Array = players[player_id].get("discard", []) as Array
+	for card_value: Variant in selected:
+		var card_id: String = String(card_value)
+		var index: int = hand.find(card_id)
+		if index >= 0:
+			hand.remove_at(index)
+			discard.append(card_id)
+			discarded.append(card_id)
+	players[player_id]["hand"] = hand
+	players[player_id]["discard"] = discard
+	pending_discard.clear()
+	_emit("cards_discarded", {
+		"player_id": player_id,
+		"card_ids": discarded.duplicate(),
+		"reason_id": reason_id,
+		"message": "%s 弃置了%d张牌。" % [String(players[player_id].get("name", "")), discarded.size()]
+	})
+	var continuation: Dictionary = discard_continuation.duplicate(true)
+	discard_continuation.clear()
+	if reason_id == "end_turn":
+		_finish_end_turn(player_id)
+		return
+	var missing: int = int(continuation.get("discard_amount", 0)) - discarded.size()
+	if bool(continuation.get("damage_shortfall", false)) and missing > 0:
+		_deal_damage(player_id, missing, "true", -1, false)
+	_apply_effects_from(
+		int(continuation.get("source_id", player_id)),
+		int(continuation.get("target_id", player_id)),
+		continuation.get("effects", []) as Array,
+		String(continuation.get("category", "effect")),
+		int(continuation.get("damage_bonus", 0)),
+		int(continuation.get("range_limit", 0)),
+		int(continuation.get("pressure_bonus", 0)),
+		bool(continuation.get("area_action", false)),
+		int(continuation.get("effect_index", 0)) + 1
+	)
 
 
 func replay_document() -> Dictionary:
@@ -213,7 +324,9 @@ func deterministic_snapshot() -> Dictionary:
 		"players": player_states,
 		"finished": finished,
 		"winner": winner_id,
-		"win_reason_id": win_reason_id
+		"win_reason_id": win_reason_id,
+		"pending_discard": pending_discard.duplicate(true),
+		"played_history": _public_play_history_snapshot()
 	}
 
 
@@ -223,9 +336,8 @@ func summary() -> String:
 		return "对局结束 · %s 获胜 · %s" % [String(winner.get("name", "未知")), win_reason]
 	var pressure_bonus: int = _duel_pressure_bonus()
 	var pressure_text: String = " · 决胜单体伤害 +%d" % pressure_bonus if pressure_bonus > 0 else ""
-	return "第 %d/%d 轮 · %s · 行动 %d · 移动 %d · 存活 %d/4 · 棋盘 %dx%d%s" % [
+	return "第 %d 轮 · %s · 行动 %d · 移动 %d · 存活 %d/4 · 棋盘 %dx%d%s" % [
 		completed_rounds + 1,
-		round_limit,
 		String(current_player().get("name", "")),
 		int(current_player().get("actions", 0)),
 		int(current_player().get("moves_remaining", 0)),
@@ -244,6 +356,10 @@ func _validate_command(command: Dictionary) -> String:
 		return "命令包含无效玩家。"
 	if not bool(players[actor_id].get("alive", false)):
 		return "被击败的玩家不能行动。"
+	if not pending_discard.is_empty():
+		if String(command.get("type", "")) != MatchCommandScript.DISCARD_CARDS or actor_id != int(pending_discard.get("player_id", -1)):
+			return "请先完成弃牌选择。"
+		return _validate_discard_payload(command.get("payload", {}) as Dictionary)
 	var candidates: Array[Dictionary] = legal_commands(actor_id)
 	for candidate: Dictionary in candidates:
 		if candidate == command:
@@ -270,12 +386,12 @@ func _create_players(roster: Array[String]) -> void:
 			"ai_persona": String(definition.get("ai_persona", "control")),
 			"health": int(definition.get("health", 7)),
 			"max_health": int(definition.get("health", 7)),
-			"stamina": max_stamina,
+			"stamina": 0,
 			"max_stamina": max_stamina,
-			"mana": max_mana,
+			"mana": 0,
 			"max_mana": max_mana,
 			"armor": 0,
-			"coins": 0,
+			"coins": 2 if character_id == "na1" else 0,
 			"actions": 0,
 			"moves_remaining": 0,
 			"market_bought": false,
@@ -292,6 +408,7 @@ func _create_players(roster: Array[String]) -> void:
 			"flags": {},
 			"match_flags": {},
 			"last_card_id": "",
+			"public_card_history": [],
 			"alive": true
 		}
 		players.append(player_state)
@@ -429,8 +546,6 @@ func _legal_skill_commands(actor_id: int) -> Array[Dictionary]:
 		var flags: Dictionary = players[actor_id].get("flags", {}) as Dictionary
 		if (flags.get("used_skills", []) as Array).has(skill_id):
 			continue
-		if not _can_pay(actor_id, skill):
-			continue
 		result.append_array(_target_commands(MatchCommandScript.USE_SKILL, actor_id, skill_id, skill))
 	return result
 
@@ -494,11 +609,13 @@ func _handle_play_card(payload: Dictionary) -> void:
 	_remove_first(active.get("hand", []) as Array, card_id)
 	_pay_cost(actor_id, definition)
 	active = players[actor_id]
-	active["actions"] = int(active.get("actions", 0)) - 1
+	_change_actions(actor_id, -1, card_id)
+	active = players[actor_id]
 	players[actor_id] = active
 	if String(definition.get("category", "")) == "equipment":
 		_equip(actor_id, card_id)
 		_emit("card_played", {"player_id": actor_id, "card_id": card_id, "message": "%s 装备了【%s】。" % [String(active.get("name", "")), String(definition.get("name", card_id))]})
+		_record_public_card(actor_id, card_id, actor_id, "equipment")
 		return
 	(active.get("discard", []) as Array).append(card_id)
 	var damage_bonus: int = 0
@@ -520,6 +637,7 @@ func _handle_play_card(payload: Dictionary) -> void:
 		"unanswerable": unanswerable
 	}
 	_emit("card_played", {"player_id": actor_id, "target_id": target_id, "card_id": card_id, "message": "%s 使用【%s】。" % [String(active.get("name", "")), String(definition.get("name", card_id))]})
+	_record_public_card(actor_id, card_id, target_id, "card")
 	_open_response_or_resolve(action)
 
 
@@ -528,9 +646,9 @@ func _handle_use_skill(payload: Dictionary) -> void:
 	var skill_id: String = String(payload.get("skill_id", ""))
 	var target_id: int = int(payload.get("target_id", actor_id))
 	var skill: Dictionary = _skill_definition(actor_id, skill_id)
-	_pay_cost(actor_id, skill)
 	var active: Dictionary = players[actor_id]
-	active["actions"] = int(active.get("actions", 0)) - 1
+	_change_actions(actor_id, -1, skill_id)
+	active = players[actor_id]
 	var flags: Dictionary = active.get("flags", {}) as Dictionary
 	var used_skills: Array = flags.get("used_skills", []) as Array
 	used_skills.append(skill_id)
@@ -593,6 +711,7 @@ func _handle_response(payload: Dictionary) -> void:
 		elif operation != "negate" and operation != "reflect":
 			_apply_single_effect(responder_id, responder_id, effect, "response", 0)
 	_emit("response_played", {"player_id": responder_id, "card_id": card_id, "message": "%s 使用响应【%s】。" % [String(responder.get("name", "")), String(definition.get("name", card_id))]})
+	_record_public_card(responder_id, card_id, int(action.get("source_id", -1)), "response")
 	if canceled:
 		_emit("action_canceled", {"source_id": int(action.get("source_id", -1)), "message": "原行动被抵消。"})
 		return
@@ -637,9 +756,21 @@ func _handle_event_choice(payload: Dictionary) -> void:
 func _handle_end_turn() -> void:
 	var ending_id: int = active_player_index
 	var active: Dictionary = players[ending_id]
-	while (active.get("hand", []) as Array).size() > hand_limit:
-		var discarded: Variant = (active.get("hand", []) as Array).pop_back()
-		(active.get("discard", []) as Array).append(discarded)
+	# A player can die while an effect (including a discard request) is settling.
+	# Dead players never discard or spend resources; advance immediately.
+	if not bool(active.get("alive", false)):
+		_finish_end_turn(ending_id)
+		return
+	var hand_limit_for_turn: int = maxi(1, int(active.get("health", 0)) - 2)
+	var excess: int = (active.get("hand", []) as Array).size() - hand_limit_for_turn
+	if excess > 0:
+		_request_discard(ending_id, excess, "end_turn")
+		return
+	_finish_end_turn(ending_id)
+
+
+func _finish_end_turn(ending_id: int) -> void:
+	var active: Dictionary = players[ending_id]
 	var status_rounds: Dictionary = active.get("status_rounds", {}) as Dictionary
 	var statuses: Dictionary = active.get("statuses", {}) as Dictionary
 	if int(statuses.get("hidden", 0)) > 0 and int(status_rounds.get("hidden", completed_rounds)) < completed_rounds:
@@ -647,6 +778,10 @@ func _handle_end_turn() -> void:
 		status_rounds.erase("hidden")
 	active["statuses"] = statuses
 	active["status_rounds"] = status_rounds
+	active["stamina"] = 0
+	active["mana"] = 0
+	active["actions"] = 0
+	active["moves_remaining"] = 0
 	players[ending_id] = active
 	_emit("turn_ended", {"player_id": ending_id, "message": "%s 结束回合。" % String(active.get("name", ""))})
 	var previous_index: int = active_player_index
@@ -656,9 +791,6 @@ func _handle_end_turn() -> void:
 	if active_player_index <= previous_index:
 		var previous_pressure: int = _duel_pressure_bonus()
 		completed_rounds += 1
-		if round_limit > 0 and completed_rounds >= round_limit:
-			_finish_by_tiebreak()
-			return
 		var current_pressure: int = _duel_pressure_bonus()
 		if current_pressure != previous_pressure:
 			_emit("duel_pressure_changed", {
@@ -689,15 +821,41 @@ func _resolve_action(action: Dictionary) -> void:
 
 
 func _apply_effects(source_id: int, target_id: int, effects: Array, category: String, damage_bonus: int, range_limit: int, pressure_bonus: int = 0, area_action: bool = false) -> void:
+	_apply_effects_from(source_id, target_id, effects, category, damage_bonus, range_limit, pressure_bonus, area_action, 0)
+
+
+func _apply_effects_from(source_id: int, target_id: int, effects: Array, category: String, damage_bonus: int, range_limit: int, pressure_bonus: int, area_action: bool, start_index: int) -> void:
 	var target_ids: Array[int] = [target_id]
 	if target_id < 0:
 		target_ids = _enemies_in_range(source_id, range_limit)
-	var bonus: int = damage_bonus + _consume_damage_bonuses(source_id, effects, category)
+	var bonus: int = damage_bonus + (_consume_damage_bonuses(source_id, effects, category) if start_index == 0 else 0)
 	var direct_action: bool = category == "attack" or category == "skill"
 	var damage_context: Dictionary = {"single_target": direct_action and not area_action, "area": direct_action and area_action, "pressure_bonus": pressure_bonus}
-	for effect_value: Variant in effects:
+	for effect_index: int in range(start_index, effects.size()):
+		var effect_value: Variant = effects[effect_index]
 		var effect: Dictionary = effect_value as Dictionary
 		var operation: String = String(effect.get("op", ""))
+		if operation == "self_discard" or operation == "discard_or_damage":
+			var amount: int = int(effect.get("amount", 0))
+			if _request_discard(source_id, amount, operation, {
+				"source_id": source_id,
+				"target_id": target_id,
+				"effects": effects.duplicate(true),
+				"category": category,
+				"damage_bonus": bonus,
+				"range_limit": range_limit,
+				"pressure_bonus": pressure_bonus,
+				"area_action": area_action,
+				"effect_index": effect_index,
+				"discard_amount": amount,
+				"damage_shortfall": operation == "discard_or_damage"
+			}):
+				return
+			if operation == "discard_or_damage":
+				var missing: int = amount - mini(amount, (players[source_id].get("hand", []) as Array).size())
+				if missing > 0:
+					_deal_damage(source_id, missing, "true", -1, false)
+			continue
 		if TARGET_EFFECTS.has(operation):
 			for affected_id: int in target_ids:
 				_apply_single_effect(source_id, affected_id, effect, category, bonus, damage_context)
@@ -734,9 +892,7 @@ func _apply_single_effect(source_id: int, target_id: int, effect: Dictionary, ca
 		"coins":
 			_change_coins(source_id, amount)
 		"extra_action":
-			var source: Dictionary = players[source_id]
-			source["actions"] = int(source.get("actions", 0)) + amount
-			players[source_id] = source
+				_change_actions(source_id, amount, "extra_action")
 		"extra_move":
 			var source: Dictionary = players[source_id]
 			source["moves_remaining"] = int(source.get("moves_remaining", 0)) + amount
@@ -846,7 +1002,7 @@ func _valid_response_cards(player_id: int, action_category: String) -> Array[Str
 			continue
 		seen[card_id] = true
 		var definition: Dictionary = catalog.call("card", card_id) as Dictionary
-		if String(definition.get("category", "")) != "response" or not _can_pay(player_id, definition):
+		if String(definition.get("category", "")) != "response" or not ["heavenly_sense", "shrug_off"].has(card_id) or not _can_pay(player_id, definition):
 			continue
 		var tags: Array[String] = _string_array(definition.get("tags", []))
 		if tags.has("response_any") or tags.has("response_%s" % action_category):
@@ -857,6 +1013,44 @@ func _valid_response_cards(player_id: int, action_category: String) -> Array[Str
 func _can_pay(player_id: int, definition: Dictionary) -> bool:
 	var cost: Dictionary = _effective_cost(player_id, definition)
 	return int(players[player_id].get("stamina", 0)) >= int(cost.get("stamina", 0)) and int(players[player_id].get("mana", 0)) >= int(cost.get("mana", 0))
+
+
+func _change_actions(player_id: int, delta: int, source_id: String) -> void:
+	var target: Dictionary = players[player_id]
+	var before: int = int(target.get("actions", 0))
+	target["actions"] = maxi(0, before + delta)
+	players[player_id] = target
+	_emit("action_points_changed", {
+		"player_id": player_id,
+		"before": before,
+		"delta": delta,
+		"after": int(target.get("actions", 0)),
+		"source_id": source_id,
+		"message": "%s %s%d个行动，剩余%d。" % [String(target.get("name", "")), "获得" if delta > 0 else "消耗", absi(delta), int(target.get("actions", 0))]
+	})
+
+
+func _record_public_card(player_id: int, card_id: String, target_id: int, play_kind: String) -> void:
+	var history: Array = players[player_id].get("public_card_history", []) as Array
+	history.append({
+		"round": completed_rounds + 1,
+		"card_id": card_id,
+		"target_id": target_id,
+		"play_kind": play_kind
+	})
+	while history.size() > 5:
+		history.pop_front()
+	players[player_id]["public_card_history"] = history
+
+
+func _public_play_history_snapshot() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for player_state: Dictionary in players:
+		result.append({
+			"player_id": int(player_state.get("id", -1)),
+			"entries": (player_state.get("public_card_history", []) as Array).duplicate(true)
+		})
+	return result
 
 
 func _effective_cost(player_id: int, definition: Dictionary) -> Dictionary:
@@ -1058,6 +1252,10 @@ func _gain_armor(player_id: int, amount: int) -> void:
 func _change_resource(player_id: int, resource: String, amount: int) -> void:
 	var target: Dictionary = players[player_id]
 	var maximum_key: String = "max_%s" % resource
+	if player_id != active_player_index:
+		target[resource] = 0
+		players[player_id] = target
+		return
 	target[resource] = clampi(int(target.get(resource, 0)) + amount, 0, int(target.get(maximum_key, 0)))
 	players[player_id] = target
 
@@ -1277,6 +1475,11 @@ func _collapse_board() -> void:
 func _settle_eliminations(initial_snapshot: Array[Dictionary]) -> void:
 	if collapse_in_progress or finished:
 		return
+	if not pending_discard.is_empty():
+		var pending_player_id: int = int(pending_discard.get("player_id", -1))
+		if pending_player_id >= 0 and not bool(players[pending_player_id].get("alive", false)):
+			pending_discard.clear()
+			discard_continuation.clear()
 	var initial_candidate_ids: Array[int] = []
 	for candidate: Dictionary in initial_snapshot:
 		initial_candidate_ids.append(int(candidate.get("id", -1)))
@@ -1320,22 +1523,12 @@ func _alive_player_ids() -> Array[int]:
 	return alive
 
 
-func _finish_by_tiebreak() -> void:
-	var best_id: int = -1
-	for player_id: int in players.size():
-		if not bool(players[player_id].get("alive", false)):
-			continue
-		if best_id < 0 or _beats_tiebreak(player_id, best_id):
-			best_id = player_id
-	_finish_match(best_id, "round_limit", "%d轮上限决胜" % round_limit)
-
-
 func _duel_pressure_bonus() -> int:
 	var round_number: int = completed_rounds + 1
 	var result: int = 0
 	for stage_value: Variant in rules.get("duel_pressure", []) as Array:
 		var stage: Dictionary = stage_value as Dictionary
-		if round_number >= int(stage.get("start_round", round_limit + 1)):
+		if round_number >= int(stage.get("start_round", 999999)):
 			result = int(stage.get("single_target_damage_bonus", 0))
 	return result
 

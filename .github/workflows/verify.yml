@@ -29,3 +29,29 @@ jobs:
           name: bengzhui-public-demo
           path: export/
           if-no-files-found: error
+
+  windows-release-smoke:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.6.3
+          use-dotnet: false
+          include-templates: true
+      - name: Run rules and fixed simulation
+        shell: bash
+        env:
+          SIMULATION_MATCHES: 1000
+        run: scripts/ci/verify.sh
+      - name: Export Windows x86_64
+        run: godot --headless --path . --export-release "Windows Desktop"
+      - name: Run Windows export smoke
+        shell: pwsh
+        run: ./export/windows/BengzhuiCards.exe --export-smoke
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bengzhui-windows-dev2
+          path: export/windows/
+          if-no-files-found: error

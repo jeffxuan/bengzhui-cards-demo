@@ -8,6 +8,11 @@ LOG_DIR="$(mktemp -d)"
 trap 'rm -rf "$LOG_DIR"' EXIT
 
 if ! command -v "$GODOT_BIN" >/dev/null 2>&1 && [[ ! -x "$GODOT_BIN" ]]; then
+  if [[ "$(uname -s)" == "Darwin" && -x "/Users/jeff.jiang/Desktop/Godot.app/Contents/MacOS/Godot" ]]; then
+    GODOT_BIN="/Users/jeff.jiang/Desktop/Godot.app/Contents/MacOS/Godot"
+  fi
+fi
+if ! command -v "$GODOT_BIN" >/dev/null 2>&1 && [[ ! -x "$GODOT_BIN" ]]; then
   echo "Godot executable not found: $GODOT_BIN" >&2
   exit 1
 fi

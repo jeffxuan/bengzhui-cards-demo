@@ -438,7 +438,7 @@ func _begin_turn() -> void:
 		"thorn_used": false,
 		"shield_axe_used": false,
 		"thunderbird_used": false,
-		"used_skills": []
+		"extra_action_used": false
 	}
 	players[active_player_index] = active
 	var status_snapshot: Array[Dictionary] = _capture_tiebreak_snapshot(_alive_player_ids())
@@ -529,7 +529,7 @@ func _legal_card_commands(actor_id: int) -> Array[Dictionary]:
 		seen[card_id] = true
 		var definition: Dictionary = catalog.call("card", card_id) as Dictionary
 		var category: String = String(definition.get("category", ""))
-		if category == "response" or not _can_pay(actor_id, definition):
+		if category == "response" or (_definition_has_extra_action(definition) and bool((active.get("flags", {}) as Dictionary).get("extra_action_used", false))) or not _can_pay(actor_id, definition):
 			continue
 		result.append_array(_target_commands(MatchCommandScript.PLAY_CARD, actor_id, card_id, definition))
 	return result
@@ -543,11 +543,17 @@ func _legal_skill_commands(actor_id: int) -> Array[Dictionary]:
 			continue
 		var skill: Dictionary = skill_value as Dictionary
 		var skill_id: String = String(skill.get("id", ""))
-		var flags: Dictionary = players[actor_id].get("flags", {}) as Dictionary
-		if (flags.get("used_skills", []) as Array).has(skill_id):
+		if _definition_has_extra_action(skill) and bool((players[actor_id].get("flags", {}) as Dictionary).get("extra_action_used", false)):
 			continue
 		result.append_array(_target_commands(MatchCommandScript.USE_SKILL, actor_id, skill_id, skill))
 	return result
+
+
+func _definition_has_extra_action(definition: Dictionary) -> bool:
+	for effect_value: Variant in definition.get("effects", []) as Array:
+		if effect_value is Dictionary and String((effect_value as Dictionary).get("op", "")) == "extra_action":
+			return int((effect_value as Dictionary).get("amount", 0)) > 0
+	return false
 
 
 func _target_commands(command_type: String, actor_id: int, definition_id: String, definition: Dictionary) -> Array[Dictionary]:
@@ -649,11 +655,6 @@ func _handle_use_skill(payload: Dictionary) -> void:
 	var active: Dictionary = players[actor_id]
 	_change_actions(actor_id, -1, skill_id)
 	active = players[actor_id]
-	var flags: Dictionary = active.get("flags", {}) as Dictionary
-	var used_skills: Array = flags.get("used_skills", []) as Array
-	used_skills.append(skill_id)
-	flags["used_skills"] = used_skills
-	active["flags"] = flags
 	players[actor_id] = active
 	var action: Dictionary = {
 		"source_id": actor_id,
@@ -892,7 +893,10 @@ func _apply_single_effect(source_id: int, target_id: int, effect: Dictionary, ca
 		"coins":
 			_change_coins(source_id, amount)
 		"extra_action":
-				_change_actions(source_id, amount, "extra_action")
+			_change_actions(source_id, amount, "extra_action")
+			var source_flags: Dictionary = players[source_id].get("flags", {}) as Dictionary
+			source_flags["extra_action_used"] = true
+			players[source_id]["flags"] = source_flags
 		"extra_move":
 			var source: Dictionary = players[source_id]
 			source["moves_remaining"] = int(source.get("moves_remaining", 0)) + amount

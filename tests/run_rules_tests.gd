@@ -57,6 +57,10 @@ func _test_turn_resources_and_free_character_skills() -> void:
 	if not command.is_empty():
 		_expect(bool(state.call("submit_command", command)), "Free character skill should resolve.")
 		_expect(int((state.call("player", 0) as Dictionary).get("actions", 0)) == 1, "Character skill still consumes one action.")
+		var repeated: Dictionary = _find_command(state, MatchCommandScript.USE_SKILL, "q_thunder_call")
+		_expect(not repeated.is_empty(), "The same character skill must remain usable while actions remain.")
+		if not repeated.is_empty():
+			_expect(bool(state.call("submit_command", repeated)), "Repeated character skill should resolve.")
 
 
 func _test_response_window_resources() -> void:

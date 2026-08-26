@@ -28,11 +28,11 @@ run_check() {
     echo "$name failed with a non-zero exit code." >&2
     exit 1
   fi
-  if rg -n 'SCRIPT ERROR|Parse Error|ERROR:|WARNING:|Failed loading resource' "$log_file"; then
+	if grep -nE 'SCRIPT ERROR|Parse Error|ERROR:|WARNING:|Failed loading resource' "$log_file"; then
     echo "$name emitted an error or warning." >&2
     exit 1
   fi
-  if [[ -n "$marker" ]] && ! rg -Fq "$marker" "$log_file"; then
+	if [[ -n "$marker" ]] && ! grep -Fq "$marker" "$log_file"; then
     echo "$name did not emit required marker: $marker" >&2
     exit 1
   fi

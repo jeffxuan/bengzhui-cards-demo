@@ -75,9 +75,7 @@ func _test_turn_resources_and_free_character_skills() -> void:
 		_expect(bool(state.call("submit_command", command)), "Free character skill should resolve.")
 		_expect(int((state.call("player", 0) as Dictionary).get("actions", 0)) == 2, "Character skills must not be limited by action points.")
 		var repeated: Dictionary = _find_command(state, MatchCommandScript.USE_SKILL, "q_thunder_call")
-		_expect(not repeated.is_empty(), "The same character skill must remain usable while actions remain.")
-		if not repeated.is_empty():
-			_expect(bool(state.call("submit_command", repeated)), "Repeated character skill should resolve.")
+		_expect(repeated.is_empty(), "Each character skill must be limited to once per turn.")
 
 
 func _test_response_window_resources() -> void:
@@ -164,7 +162,7 @@ func _test_purchased_cards_persist() -> void:
 	active["coins"] = 10
 	active["actions"] = 2
 	state.players[0] = active
-	state.set("market", ["slash", "heavy_slash", "precise_thrust"])
+	state.call("set_market_for_testing", ["slash", "heavy_slash", "precise_thrust"] as Array[String])
 	var buy: Dictionary = {}
 	for command: Dictionary in state.call("legal_commands", 0) as Array[Dictionary]:
 		if String(command.get("type", "")) == MatchCommandScript.BUY:

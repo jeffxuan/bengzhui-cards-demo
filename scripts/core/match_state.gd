@@ -215,6 +215,10 @@ func drain_events() -> Array[Dictionary]:
 	return drained
 
 
+func set_market_for_testing(card_ids: Array[String]) -> void:
+	market = card_ids.duplicate()
+
+
 func _validate_discard_payload(payload: Dictionary) -> String:
 	if String(payload.get("request_id", "")) != String(pending_discard.get("request_id", "")):
 		return "弃牌请求已经失效。"
@@ -333,6 +337,7 @@ func deterministic_snapshot() -> Dictionary:
 			"common_discard": (player_state.get("common_discard", []) as Array).duplicate(),
 			"profession_discard": (player_state.get("profession_discard", []) as Array).duplicate(),
 			"statuses": (player_state["statuses"] as Dictionary).duplicate(true),
+			"skills_used": (player_state.get("skills_used", {}) as Dictionary).duplicate(),
 			"alive": bool(player_state["alive"])
 		})
 	return {
@@ -444,6 +449,7 @@ func _create_players(roster: Array[String]) -> void:
 			"equipment": {"weapon": "", "armor": "", "accessory": ""},
 			"stats": {"damage_dealt": 0, "eliminations": 0},
 			"flags": {},
+			"skills_used": {},
 			"match_flags": {},
 			"last_card_id": "",
 			"public_card_history": [],
@@ -483,6 +489,7 @@ func _begin_turn() -> void:
 		"thunderbird_used": false,
 		"extra_action_used": false
 	}
+	active["skills_used"] = {}
 	players[active_player_index] = active
 	var status_snapshot: Array[Dictionary] = _capture_tiebreak_snapshot(_alive_player_ids())
 	_tick_start_statuses(active_player_index)
@@ -609,6 +616,8 @@ func _legal_skill_commands(actor_id: int) -> Array[Dictionary]:
 			continue
 		var skill: Dictionary = skill_value as Dictionary
 		var skill_id: String = String(skill.get("id", ""))
+		if bool((players[actor_id].get("skills_used", {}) as Dictionary).get(skill_id, false)):
+			continue
 		result.append_array(_target_commands(MatchCommandScript.USE_SKILL, actor_id, skill_id, skill))
 	return result
 
@@ -719,6 +728,9 @@ func _handle_use_skill(payload: Dictionary) -> void:
 	var skill_id: String = String(payload.get("skill_id", ""))
 	var target_id: int = int(payload.get("target_id", actor_id))
 	var skill: Dictionary = _skill_definition(actor_id, skill_id)
+	var skills_used: Dictionary = players[actor_id].get("skills_used", {}) as Dictionary
+	skills_used[skill_id] = true
+	players[actor_id]["skills_used"] = skills_used
 	var active: Dictionary = players[actor_id]
 	active = players[actor_id]
 	players[actor_id] = active

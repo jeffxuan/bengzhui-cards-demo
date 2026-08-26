@@ -537,6 +537,26 @@ func _refresh_hand() -> void:
 func _refresh_skills() -> void:
 	_clear_children(skill_box)
 	var human: Dictionary = state.call("player", 0) as Dictionary
+	if bool(state.get("profession_choice_pending")):
+		skill_box.add_child(_label("回合开始：选择职业", 16, COLORS["gold"] as Color))
+		var first_choice: Button = null
+		for profession_value: Variant in human.get("professions", []) as Array:
+			var profession_id: String = String(profession_value)
+			var choice: Button = Button.new()
+			choice.text = "切换为%s" % _profession_name(profession_id)
+			choice.tooltip_text = "本回合摸牌数量减少1张"
+			choice.pressed.connect(_submit_profession_choice.bind(profession_id))
+			skill_box.add_child(choice)
+			if first_choice == null:
+				first_choice = choice
+		var keep: Button = Button.new()
+		keep.text = "保持%s" % _profession_name(String(human.get("profession", "")))
+		keep.pressed.connect(_submit_profession_choice.bind(""))
+		skill_box.add_child(keep)
+		if first_choice == null:
+			first_choice = keep
+		first_choice.grab_focus.call_deferred()
+		return
 	var character_definition: Dictionary = catalog.call("character", String(human.get("character_id", ""))) as Dictionary
 	var legal: Array[Dictionary] = state.call("legal_commands", 0) as Array[Dictionary]
 	for skill_value: Variant in character_definition.get("skills", []) as Array:
@@ -613,6 +633,10 @@ func _select_card(card_id: String) -> void:
 
 func _select_skill(skill_id: String) -> void:
 	_select_definition_commands(MatchCommandScript.USE_SKILL, "skill_id", skill_id)
+
+
+func _submit_profession_choice(profession_id: String) -> void:
+	_submit_human_command(MatchCommandScript.make(MatchCommandScript.SWITCH_PROFESSION, 0, {"profession": profession_id}))
 
 
 func _select_definition_commands(command_type: String, payload_key: String, definition_id: String) -> void:
@@ -1192,7 +1216,7 @@ func _short_text(value: String, maximum: int) -> String:
 
 
 func _profession_name(profession: String) -> String:
-	return {"vanguard": "先锋", "arcanist": "术士", "trickster": "诡术师", "stalker": "猎手"}.get(profession, "中立") as String
+	return {"vanguard": "先锋", "arcanist": "元素大师", "trickster": "诡术师", "stalker": "猎手", "shooter": "枪手", "assassin": "刺客", "berserker": "狂战士", "ambitionist": "野心家", "adventurer": "冒险家"}.get(profession, "中立") as String
 
 
 func _has_definition_command(commands: Array[Dictionary], command_type: String, definition_id: String) -> bool:

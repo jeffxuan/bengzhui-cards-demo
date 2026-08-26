@@ -26,6 +26,7 @@ var collapse_count: int = 0
 var pending_action: Dictionary = {}
 var pending_event: Dictionary = {}
 var pending_discard: Dictionary = {}
+var profession_choice_pending: bool = false
 var discard_continuation: Dictionary = {}
 var last_event: Dictionary = {}
 var market: Array[String] = []
@@ -148,6 +149,8 @@ func submit_command(command: Dictionary) -> bool:
 			_handle_end_turn()
 		MatchCommandScript.DISCARD_CARDS:
 			_handle_discard_cards(payload)
+		MatchCommandScript.SWITCH_PROFESSION:
+			_handle_switch_profession(payload)
 	_settle_eliminations(tiebreak_snapshot)
 	if not finished and pending_action.is_empty() and pending_event.is_empty() and not bool(current_player().get("alive", false)):
 		var followup_snapshot: Array[Dictionary] = _capture_tiebreak_snapshot(_alive_player_ids())
@@ -167,6 +170,13 @@ func legal_commands(actor_id: int = -1) -> Array[Dictionary]:
 				"request_id": String(pending_discard.get("request_id", "")),
 				"required_count": int(pending_discard.get("required_count", 0))
 			}))
+		return result
+	if profession_choice_pending:
+		if actor_id < 0 or actor_id == active_player_index:
+			var options: Array = (current_player().get("professions", []) as Array).duplicate()
+			options.append("")
+			for profession_value: Variant in options:
+				result.append(MatchCommandScript.make(MatchCommandScript.SWITCH_PROFESSION, active_player_index, {"profession": String(profession_value)}))
 		return result
 	if not pending_action.is_empty():
 		var responder_id: int = int(pending_action.get("responder_id", -1))
@@ -308,6 +318,8 @@ func deterministic_snapshot() -> Dictionary:
 			"health": int(player_state["health"]),
 			"armor": int(player_state["armor"]),
 			"coins": int(player_state["coins"]),
+			"profession": String(player_state.get("profession", "")),
+			"professions": (player_state.get("professions", []) as Array).duplicate(),
 			"position": _position_payload(player_state["position"] as Vector2i),
 			"hand": (player_state["hand"] as Array).duplicate(),
 			"purchased_hand": (player_state.get("purchased_hand", []) as Array).duplicate(),
@@ -327,6 +339,7 @@ func deterministic_snapshot() -> Dictionary:
 		"winner": winner_id,
 		"win_reason_id": win_reason_id,
 		"pending_discard": pending_discard.duplicate(true),
+		"profession_choice_pending": profession_choice_pending,
 		"played_history": _public_play_history_snapshot()
 	}
 
@@ -361,6 +374,13 @@ func _validate_command(command: Dictionary) -> String:
 		if String(command.get("type", "")) != MatchCommandScript.DISCARD_CARDS or actor_id != int(pending_discard.get("player_id", -1)):
 			return "请先完成弃牌选择。"
 		return _validate_discard_payload(command.get("payload", {}) as Dictionary)
+	if profession_choice_pending:
+		if String(command.get("type", "")) != MatchCommandScript.SWITCH_PROFESSION or actor_id != active_player_index:
+			return "请先选择本回合职业。"
+		var selected_profession: String = String((command.get("payload", {}) as Dictionary).get("profession", ""))
+		if not selected_profession.is_empty() and not (players[actor_id].get("professions", []) as Array).has(selected_profession):
+			return "只能选择该角色的主职业或副职业。"
+		return ""
 	var candidates: Array[Dictionary] = legal_commands(actor_id)
 	for candidate: Dictionary in candidates:
 		if candidate == command:
@@ -384,6 +404,7 @@ func _create_players(roster: Array[String]) -> void:
 			"character_id": String(definition.get("id", "q")),
 			"name": String(definition.get("name", "Q")),
 			"profession": String(definition.get("profession", "neutral")),
+			"professions": (definition.get("professions", [String(definition.get("profession", "neutral"))]) as Array).duplicate(),
 			"ai_persona": String(definition.get("ai_persona", "control")),
 			"health": int(definition.get("health", 7)),
 			"max_health": int(definition.get("health", 7)),
@@ -459,18 +480,36 @@ func _begin_turn() -> void:
 	active["actions"] = int(rules.get("action_points", 2))
 	active["moves_remaining"] = 1
 	active["market_bought"] = false
+	profession_choice_pending = true
 	var statuses: Dictionary = active.get("statuses", {}) as Dictionary
 	if int(statuses.get("paralyze", 0)) > 0:
 		active["moves_remaining"] = 0
 		statuses.erase("paralyze")
-	if completed_rounds > 0:
-		var draw_amount: int = draw_per_turn
-		if int(statuses.get("confusion", 0)) > 0:
-			draw_amount = maxi(0, draw_amount - 2)
-			statuses.erase("confusion")
-		_draw_cards(active_player_index, draw_amount)
 	active["statuses"] = statuses
 	players[active_player_index] = active
+	_emit("profession_choice_requested", {"player_id": active_player_index, "message": "%s 选择本回合职业。" % String(active.get("name", ""))})
+
+
+func _handle_switch_profession(payload: Dictionary) -> void:
+	var active: Dictionary = players[active_player_index]
+	var selected: String = String(payload.get("profession", ""))
+	var converted: bool = not selected.is_empty() and selected != String(active.get("profession", ""))
+	if converted:
+		active["profession"] = selected
+	players[active_player_index] = active
+	profession_choice_pending = false
+	var statuses: Dictionary = active.get("statuses", {}) as Dictionary
+	var draw_amount: int = 3 if completed_rounds == 0 else draw_per_turn
+	if converted:
+		draw_amount = 2 if completed_rounds == 0 else maxi(0, draw_per_turn - 1)
+	if int(statuses.get("confusion", 0)) > 0:
+		draw_amount = maxi(0, draw_amount - 2)
+		statuses.erase("confusion")
+	_draw_cards(active_player_index, draw_amount)
+	active = players[active_player_index]
+	active["statuses"] = statuses
+	players[active_player_index] = active
+	_emit("profession_switched", {"player_id": active_player_index, "profession": String(active.get("profession", "")), "converted": converted, "draw_amount": draw_amount, "message": "%s 本回合职业：%s，摸%d张牌。" % [String(active.get("name", "")), String(active.get("profession", "")), draw_amount]})
 	_emit("turn_started", {"player_id": active_player_index, "message": "%s 开始回合。" % String(active.get("name", ""))})
 
 

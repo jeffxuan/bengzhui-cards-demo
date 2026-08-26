@@ -13,6 +13,7 @@ func _init() -> void:
 	rules = JSON.parse_string(FileAccess.get_file_as_string("res://rules/match_rules.json")) as Dictionary
 	catalog = ContentCatalogScript.new()
 	_test_content_contract()
+	_test_profession_switch_and_opening_draw()
 	_test_turn_resources_and_free_character_skills()
 	_test_response_window_resources()
 	_test_discard_phase_and_replay_continuation()
@@ -40,6 +41,21 @@ func _test_content_contract() -> void:
 		var card: Dictionary = card_value as Dictionary
 		if String(card.get("category", "")) == "response":
 			_expect(["heavenly_sense", "shrug_off"].has(String(card.get("id", ""))), "Only two response cards may remain.")
+
+
+func _test_profession_switch_and_opening_draw() -> void:
+	var keep_state: RefCounted = MatchStateScript.new(rules, catalog, ["q", "ginger", "maddy", "signal"], 100)
+	_expect(bool(keep_state.get("profession_choice_pending")), "Turn must begin with profession choice.")
+	keep_state.call("submit_command", MatchCommandScript.make(MatchCommandScript.SWITCH_PROFESSION, 0, {"profession": ""}))
+	_expect((keep_state.call("player", 0) as Dictionary).get("hand", []).size() == 7, "Keeping profession on round one draws three cards.")
+	var switch_state: RefCounted = MatchStateScript.new(rules, catalog, ["q", "ginger", "maddy", "signal"], 100)
+	switch_state.call("submit_command", MatchCommandScript.make(MatchCommandScript.SWITCH_PROFESSION, 0, {"profession": "shooter"}))
+	var switched_player: Dictionary = switch_state.call("player", 0) as Dictionary
+	_expect(String(switched_player.get("profession", "")) == "shooter", "Q must switch to the documented secondary profession.")
+	_expect((switched_player.get("hand", []) as Array).size() == 6, "Switching profession on round one draws two cards.")
+	var ginger_state: RefCounted = MatchStateScript.new(rules, catalog, ["ginger", "q", "maddy", "signal"], 101)
+	var ginger: Dictionary = ginger_state.call("player", 0) as Dictionary
+	_expect((ginger.get("professions", []) as Array).size() == 1, "Ginger must remain single-profession.")
 
 
 func _test_turn_resources_and_free_character_skills() -> void:
@@ -165,7 +181,10 @@ func _test_purchased_cards_persist() -> void:
 
 
 func _state(roster: Array[String], seed: int) -> RefCounted:
-	return MatchStateScript.new(rules, catalog, roster, seed)
+	var state: RefCounted = MatchStateScript.new(rules, catalog, roster, seed)
+	if bool(state.get("profession_choice_pending")):
+		state.call("submit_command", MatchCommandScript.make(MatchCommandScript.SWITCH_PROFESSION, 0, {"profession": ""}))
+	return state
 
 
 func _find_command(state: RefCounted, command_type: String, definition_id: String) -> Dictionary:

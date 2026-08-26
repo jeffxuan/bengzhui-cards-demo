@@ -8,6 +8,8 @@ func choose_command(state: RefCounted, actor_id: int) -> Dictionary:
 	var commands: Array[Dictionary] = state.call("legal_commands", actor_id) as Array[Dictionary]
 	if commands.is_empty():
 		return {}
+	if String(commands[0].get("type", "")) == MatchCommandScript.SWITCH_PROFESSION:
+		return commands[0]
 	if String(commands[0].get("type", "")) == MatchCommandScript.DISCARD_CARDS:
 		return _choose_discard_command(state, actor_id, commands[0].get("payload", {}) as Dictionary)
 	var persona: String = String((state.call("player", actor_id) as Dictionary).get("ai_persona", "control"))

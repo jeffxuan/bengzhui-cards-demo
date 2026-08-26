@@ -20,6 +20,8 @@ jobs:
           include-templates: true
       - name: Verify rules, UI, and simulations
         run: scripts/ci/verify.sh
+      - name: Prepare export directories
+        run: mkdir -p export/windows export/macos
       - name: Export Windows build
         run: godot --headless --path . --export-release "Windows Desktop"
       - name: Export macOS build
@@ -45,6 +47,9 @@ jobs:
         env:
           SIMULATION_MATCHES: 1000
         run: scripts/ci/verify.sh
+      - name: Prepare export directory
+        shell: pwsh
+        run: New-Item -ItemType Directory -Force export/windows | Out-Null
       - name: Export Windows x86_64
         run: godot --headless --path . --export-release "Windows Desktop"
       - name: Run Windows export smoke

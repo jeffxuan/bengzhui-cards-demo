@@ -73,7 +73,7 @@ func _test_turn_resources_and_free_character_skills() -> void:
 	_expect(not command.is_empty(), "A character skill must remain usable at zero resources.")
 	if not command.is_empty():
 		_expect(bool(state.call("submit_command", command)), "Free character skill should resolve.")
-		_expect(int((state.call("player", 0) as Dictionary).get("actions", 0)) == 1, "Character skill still consumes one action.")
+		_expect(int((state.call("player", 0) as Dictionary).get("actions", 0)) == 2, "Character skills must not be limited by action points.")
 		var repeated: Dictionary = _find_command(state, MatchCommandScript.USE_SKILL, "q_thunder_call")
 		_expect(not repeated.is_empty(), "The same character skill must remain usable while actions remain.")
 		if not repeated.is_empty():
@@ -135,7 +135,7 @@ func _test_extra_action_and_round_pressure() -> void:
 	state.players[0] = active
 	var command: Dictionary = _find_command(state, MatchCommandScript.USE_SKILL, "k_brainstorm")
 	_expect(bool(state.call("submit_command", command)), "Brainstorm should resolve.")
-	_expect(int((state.call("player", 0) as Dictionary).get("actions", 0)) == 2, "An extra action must offset the skill action cost.")
+	_expect(int((state.call("player", 0) as Dictionary).get("actions", 0)) == 3, "Extra action feedback must still increase the action counter.")
 	state.completed_rounds = 7
 	_expect(not bool(state.get("finished")), "The eighth round must not finish the match.")
 	_expect(int(state.call("_duel_pressure_bonus")) == 2, "Round seven and later must retain +2 single-target pressure.")

@@ -199,9 +199,11 @@ func legal_commands(actor_id: int = -1) -> Array[Dictionary]:
 	var active: Dictionary = current_player()
 	if int(active.get("moves_remaining", 0)) > 0:
 		result.append_array(_legal_move_commands(active_id))
+	# Cards and character skills are resource-driven. Action points are reserved
+	# for market purchases and are not a cap on playing cards or using skills.
+	result.append_array(_legal_card_commands(active_id))
+	result.append_array(_legal_skill_commands(active_id))
 	if int(active.get("actions", 0)) > 0:
-		result.append_array(_legal_card_commands(active_id))
-		result.append_array(_legal_skill_commands(active_id))
 		result.append_array(_legal_buy_commands(active_id))
 	result.append(MatchCommandScript.make(MatchCommandScript.END_TURN, active_id))
 	return result
@@ -593,7 +595,7 @@ func _legal_card_commands(actor_id: int) -> Array[Dictionary]:
 		seen[card_id] = true
 		var definition: Dictionary = catalog.call("card", card_id) as Dictionary
 		var category: String = String(definition.get("category", ""))
-		if category == "response" or (_definition_has_extra_action(definition) and bool((active.get("flags", {}) as Dictionary).get("extra_action_used", false))) or not _can_pay(actor_id, definition):
+		if category == "response" or not _can_pay(actor_id, definition):
 			continue
 		result.append_array(_target_commands(MatchCommandScript.PLAY_CARD, actor_id, card_id, definition))
 	return result
@@ -607,8 +609,6 @@ func _legal_skill_commands(actor_id: int) -> Array[Dictionary]:
 			continue
 		var skill: Dictionary = skill_value as Dictionary
 		var skill_id: String = String(skill.get("id", ""))
-		if _definition_has_extra_action(skill) and bool((players[actor_id].get("flags", {}) as Dictionary).get("extra_action_used", false)):
-			continue
 		result.append_array(_target_commands(MatchCommandScript.USE_SKILL, actor_id, skill_id, skill))
 	return result
 
@@ -680,7 +680,6 @@ func _handle_play_card(payload: Dictionary) -> void:
 		_remove_first(active.get("purchased_hand", []) as Array, card_id)
 	_pay_cost(actor_id, definition)
 	active = players[actor_id]
-	_change_actions(actor_id, -1, card_id)
 	active = players[actor_id]
 	players[actor_id] = active
 	if String(definition.get("category", "")) == "equipment":
@@ -721,7 +720,6 @@ func _handle_use_skill(payload: Dictionary) -> void:
 	var target_id: int = int(payload.get("target_id", actor_id))
 	var skill: Dictionary = _skill_definition(actor_id, skill_id)
 	var active: Dictionary = players[actor_id]
-	_change_actions(actor_id, -1, skill_id)
 	active = players[actor_id]
 	players[actor_id] = active
 	var action: Dictionary = {

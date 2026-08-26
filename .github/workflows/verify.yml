@@ -54,7 +54,7 @@ jobs:
         shell: pwsh
         run: |
           $output = Join-Path $PWD 'export/windows/BengzhuiCards.exe'
-          & $env:GODOT --headless --path . --export-release "Windows Desktop" $output
+          & $env:GODOT --headless --verbose --path $PWD --export-release "Windows Desktop" $output
           Get-ChildItem -Force -Recurse export
       - name: Run Windows export smoke
         shell: pwsh

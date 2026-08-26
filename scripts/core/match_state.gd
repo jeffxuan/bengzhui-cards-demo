@@ -265,6 +265,7 @@ func _handle_discard_cards(payload: Dictionary) -> void:
 		if index >= 0:
 			hand.remove_at(index)
 			discard.append(card_id)
+			_record_discard_origin(player_id, card_id)
 			discarded.append(card_id)
 	players[player_id]["hand"] = hand
 	players[player_id]["discard"] = discard
@@ -325,6 +326,10 @@ func deterministic_snapshot() -> Dictionary:
 			"purchased_hand": (player_state.get("purchased_hand", []) as Array).duplicate(),
 			"deck": (player_state["deck"] as Array).duplicate(),
 			"discard": (player_state["discard"] as Array).duplicate(),
+			"common_deck": (player_state.get("common_deck", []) as Array).duplicate(),
+			"profession_deck": (player_state.get("profession_deck", []) as Array).duplicate(),
+			"common_discard": (player_state.get("common_discard", []) as Array).duplicate(),
+			"profession_discard": (player_state.get("profession_discard", []) as Array).duplicate(),
 			"statuses": (player_state["statuses"] as Dictionary).duplicate(true),
 			"alive": bool(player_state["alive"])
 		})
@@ -395,8 +400,11 @@ func _create_players(roster: Array[String]) -> void:
 		if definition.is_empty():
 			definition = catalog.call("character", "q") as Dictionary
 		var position: Vector2i = start_positions[seat] if seat < start_positions.size() else Vector2i(1 + (seat % 2) * 6, 1 + (seat / 2) * 6)
-		var deck: Array[String] = _string_array(definition.get("starter_cards", []))
-		_shuffle_strings(deck)
+		var starter_cards: Array[String] = _string_array(definition.get("starter_cards", []))
+		var common_deck: Array[String] = _build_common_deck()
+		var profession_deck: Array[String] = _build_profession_deck(String(definition.get("profession", "")))
+		_shuffle_strings(common_deck)
+		_shuffle_strings(profession_deck)
 		var max_stamina: int = int(definition.get("stamina", 2))
 		var max_mana: int = int(definition.get("mana", 2))
 		var player_state: Dictionary = {
@@ -404,6 +412,7 @@ func _create_players(roster: Array[String]) -> void:
 			"character_id": String(definition.get("id", "q")),
 			"name": String(definition.get("name", "Q")),
 			"profession": String(definition.get("profession", "neutral")),
+			"card_pool_profession": String(definition.get("profession", "neutral")),
 			"professions": (definition.get("professions", [String(definition.get("profession", "neutral"))]) as Array).duplicate(),
 			"ai_persona": String(definition.get("ai_persona", "control")),
 			"health": int(definition.get("health", 7)),
@@ -420,8 +429,12 @@ func _create_players(roster: Array[String]) -> void:
 			"position": position,
 			"hand": [],
 			"purchased_hand": [],
-			"deck": deck,
+			"deck": starter_cards.duplicate(),
 			"discard": [],
+			"common_deck": common_deck,
+			"profession_deck": profession_deck,
+			"common_discard": [],
+			"profession_discard": [],
 			"statuses": {},
 			"status_sources": {},
 			"modifiers": {},
@@ -434,8 +447,13 @@ func _create_players(roster: Array[String]) -> void:
 			"public_card_history": [],
 			"alive": true
 		}
+		_shuffle_strings(starter_cards)
+		var starting_hand: Array[String] = []
+		for _draw_index: int in int(rules.get("starting_hand", 4)):
+			if not starter_cards.is_empty():
+				starting_hand.append(starter_cards.pop_back())
+		player_state["hand"] = starting_hand
 		players.append(player_state)
-		_draw_cards(seat, int(rules.get("starting_hand", 4)))
 
 
 func _setup_market() -> void:
@@ -496,6 +514,9 @@ func _handle_switch_profession(payload: Dictionary) -> void:
 	var converted: bool = not selected.is_empty() and selected != String(active.get("profession", ""))
 	if converted:
 		active["profession"] = selected
+		active["profession_deck"] = _build_profession_deck(selected)
+		active["profession_discard"] = []
+		active["card_pool_profession"] = selected
 	players[active_player_index] = active
 	profession_choice_pending = false
 	var statuses: Dictionary = active.get("statuses", {}) as Dictionary
@@ -667,7 +688,10 @@ func _handle_play_card(payload: Dictionary) -> void:
 		_emit("card_played", {"player_id": actor_id, "card_id": card_id, "message": "%s 装备了【%s】。" % [String(active.get("name", "")), String(definition.get("name", card_id))]})
 		_record_public_card(actor_id, card_id, actor_id, "equipment")
 		return
+	active = players[actor_id]
 	(active.get("discard", []) as Array).append(card_id)
+	players[actor_id] = active
+	_record_discard_origin(actor_id, card_id)
 	var damage_bonus: int = 0
 	var unanswerable: bool = false
 	var statuses: Dictionary = active.get("statuses", {}) as Dictionary
@@ -744,6 +768,7 @@ func _handle_response(payload: Dictionary) -> void:
 	responder = players[responder_id]
 	(responder.get("discard", []) as Array).append(card_id)
 	players[responder_id] = responder
+	_record_discard_origin(responder_id, card_id)
 	var canceled: bool = false
 	var reflected: bool = false
 	for effect_value: Variant in definition.get("effects", []) as Array:
@@ -784,7 +809,10 @@ func _handle_buy(payload: Dictionary) -> void:
 	if String(definition.get("category", "")) == "equipment":
 		_equip(actor_id, card_id)
 	else:
-		(active.get("purchased_hand", []) as Array).append(card_id)
+		var purchased_hand: Array = (active.get("purchased_hand", []) as Array).duplicate()
+		purchased_hand.append(card_id)
+		active["purchased_hand"] = purchased_hand
+		players[actor_id] = active
 	_replenish_market()
 	_emit("market_bought", {"player_id": actor_id, "card_id": card_id, "message": "%s 购买【%s】。" % [String(active.get("name", "")), String(definition.get("name", card_id))]})
 
@@ -1428,7 +1456,9 @@ func _discard_cards(player_id: int, amount: int) -> int:
 	var discard: Array = players[player_id].get("discard", []) as Array
 	var discarded: int = mini(amount, hand.size())
 	for _index: int in discarded:
-		discard.append(hand.pop_back())
+		var card_id: String = String(hand.pop_back())
+		discard.append(card_id)
+		_record_discard_origin(player_id, card_id)
 	return discarded
 
 
@@ -1437,19 +1467,59 @@ func _draw_cards(player_id: int, amount: int) -> void:
 		return
 	var target: Dictionary = players[player_id]
 	var hand: Array = target.get("hand", []) as Array
-	var deck: Array[String] = _string_array(target.get("deck", []))
-	var discard: Array[String] = _string_array(target.get("discard", []))
+	var common_deck: Array[String] = _string_array(target.get("common_deck", []))
+	var profession_deck: Array[String] = _string_array(target.get("profession_deck", []))
+	var common_discard: Array[String] = _string_array(target.get("common_discard", []))
+	var profession_discard: Array[String] = _string_array(target.get("profession_discard", []))
 	for _index: int in amount:
-		if deck.is_empty() and not discard.is_empty():
-			deck = discard.duplicate()
-			discard.clear()
-			_shuffle_strings(deck)
-		if deck.is_empty():
+		if common_deck.is_empty() and not common_discard.is_empty():
+			common_deck = common_discard.duplicate()
+			common_discard.clear()
+			_shuffle_strings(common_deck)
+		if profession_deck.is_empty() and not profession_discard.is_empty():
+			profession_deck = profession_discard.duplicate()
+			profession_discard.clear()
+			_shuffle_strings(profession_deck)
+		var use_profession: bool = not profession_deck.is_empty() and (common_deck.is_empty() or rng.randi_range(0, 1) == 1)
+		if use_profession:
+			hand.append(profession_deck.pop_back())
+		elif not common_deck.is_empty():
+			hand.append(common_deck.pop_back())
+		else:
 			break
-		hand.append(deck.pop_back())
 	target["hand"] = hand
-	target["deck"] = deck
-	target["discard"] = discard
+	target["common_deck"] = common_deck
+	target["profession_deck"] = profession_deck
+	target["common_discard"] = common_discard
+	target["profession_discard"] = profession_discard
+	players[player_id] = target
+
+
+func _build_common_deck() -> Array[String]:
+	var result: Array[String] = []
+	for definition: Dictionary in catalog.get("cards") as Array[Dictionary]:
+		var profession: String = String(definition.get("profession", "neutral"))
+		if profession == "neutral" or String(definition.get("category", "")) == "equipment":
+			result.append(String(definition.get("id", "")))
+	return result
+
+
+func _build_profession_deck(profession: String) -> Array[String]:
+	var result: Array[String] = []
+	if profession.is_empty() or profession == "neutral":
+		return result
+	for definition: Dictionary in catalog.get("cards") as Array[Dictionary]:
+		if String(definition.get("profession", "")) == profession:
+			result.append(String(definition.get("id", "")))
+	return result
+
+
+func _record_discard_origin(player_id: int, card_id: String) -> void:
+	var definition: Dictionary = catalog.call("card", card_id) as Dictionary
+	var profession: String = String(definition.get("profession", "neutral"))
+	var target: Dictionary = players[player_id]
+	var discard_key: String = "profession_discard" if profession != "neutral" and String(definition.get("category", "")) != "equipment" else "common_discard"
+	(target.get(discard_key, []) as Array).append(card_id)
 	players[player_id] = target
 
 
@@ -1464,6 +1534,7 @@ func _equip(player_id: int, card_id: String) -> void:
 	if not previous.is_empty():
 		_remove_equipment_modifiers(player_id, previous)
 		(target.get("discard", []) as Array).append(previous)
+		_record_discard_origin(player_id, previous)
 		target = players[player_id]
 		equipment = target.get("equipment", {}) as Dictionary
 	equipment[slot] = card_id

@@ -51,10 +51,16 @@ jobs:
         shell: pwsh
         run: New-Item -ItemType Directory -Force export/windows | Out-Null
       - name: Export Windows x86_64
-        run: godot --headless --path . --export-release "Windows Desktop" export/windows/BengzhuiCards.exe
+        shell: pwsh
+        run: |
+          $output = Join-Path $PWD 'export/windows/BengzhuiCards.exe'
+          godot --headless --path . --export-release "Windows Desktop" $output
+          Get-ChildItem -Force export/windows
       - name: Run Windows export smoke
         shell: pwsh
-        run: ./export/windows/BengzhuiCards.exe --export-smoke
+        run: |
+          $executable = Join-Path $PWD 'export/windows/BengzhuiCards.exe'
+          & $executable --export-smoke
       - uses: actions/upload-artifact@v4
         with:
           name: bengzhui-windows-dev2

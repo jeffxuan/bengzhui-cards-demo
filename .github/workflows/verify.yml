@@ -55,11 +55,12 @@ jobs:
         run: |
           $output = Join-Path $PWD 'export/windows/BengzhuiCards.exe'
           godot --headless --path . --export-release "Windows Desktop" $output
-          Get-ChildItem -Force export/windows
+          Get-ChildItem -Force -Recurse export
       - name: Run Windows export smoke
         shell: pwsh
         run: |
-          $executable = Join-Path $PWD 'export/windows/BengzhuiCards.exe'
+          $executable = Get-ChildItem -Recurse export/windows -Filter '*.exe' | Select-Object -First 1 -ExpandProperty FullName
+          if ([string]::IsNullOrWhiteSpace($executable)) { throw 'Windows export executable was not produced.' }
           & $executable --export-smoke
       - uses: actions/upload-artifact@v4
         with:

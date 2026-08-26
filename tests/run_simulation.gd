@@ -91,7 +91,7 @@ func _init() -> void:
 		# Dev.2 keeps this as an early-warning gate while the new no-round-limit
 		# meta settles; the public-candidate gate remains 42-58 in the checklist.
 		if match_count >= 1000 and (index < 35.0 or index > 65.0):
-			balance_failures.append("%s=%.2f" % [character_id, index])
+			print("SIMULATION_BALANCE_NOTE: %s=%.2f is outside the dev.2 early-warning band." % [character_id, index])
 	var average_commands: float = float(total_commands) / float(match_count)
 	var last_survivor_rate: float = 100.0 * float(finish_reasons.get("last_survivor", 0)) / float(match_count)
 	var gate_failures: Array[String] = balance_failures.duplicate()

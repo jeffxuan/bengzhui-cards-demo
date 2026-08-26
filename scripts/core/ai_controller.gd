@@ -9,7 +9,7 @@ func choose_command(state: RefCounted, actor_id: int) -> Dictionary:
 	if commands.is_empty():
 		return {}
 	var actor: Dictionary = state.call("player", actor_id) as Dictionary
-	if int(actor.get("turn_commands", 0)) >= 3:
+	if int(actor.get("turn_commands", 0)) >= 2:
 		for command: Dictionary in commands:
 			if String(command.get("type", "")) == MatchCommandScript.END_TURN:
 				return command
@@ -131,6 +131,12 @@ func _score_move(state: RefCounted, actor_id: int, payload: Dictionary, persona:
 		destination_nearest = mini(destination_nearest, absi(destination.x - target_position.x) + absi(destination.y - target_position.y))
 	var pursuit_weight: float = 8.0 if persona == "offense" else 5.0
 	score += float(current_nearest - destination_nearest) * pursuit_weight
+	var alive_count: int = 0
+	for player_value: Variant in state.get("players") as Array:
+		if bool((player_value as Dictionary).get("alive", false)):
+			alive_count += 1
+	if alive_count <= 3:
+		score += 48.0 - float(destination_nearest) * 2.5
 	return score - float(path.size()) * 0.05
 
 
@@ -176,9 +182,8 @@ func _score_definition(state: RefCounted, actor_id: int, payload: Dictionary, is
 			score -= amount * 5.0
 	if String(definition.get("category", "")) == "equipment":
 		score += 10.0
-	# Keep the deterministic showcase AI from over-selecting the strongest
-	# burst kits while still making the economy/support characters act on
-	# their distinctive opportunities. This is AI policy, not rule logic.
+	# Keep simulation opponents from over- or under-selecting the current
+	# showcase kits. This only affects AI policy; player rules are unchanged.
 	var character_id: String = String(actor.get("character_id", ""))
 	match character_id:
 		"q": score -= 8.0

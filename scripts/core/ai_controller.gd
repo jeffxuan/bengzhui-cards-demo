@@ -8,6 +8,11 @@ func choose_command(state: RefCounted, actor_id: int) -> Dictionary:
 	var commands: Array[Dictionary] = state.call("legal_commands", actor_id) as Array[Dictionary]
 	if commands.is_empty():
 		return {}
+	var actor: Dictionary = state.call("player", actor_id) as Dictionary
+	if int(actor.get("turn_commands", 0)) >= 3:
+		for command: Dictionary in commands:
+			if String(command.get("type", "")) == MatchCommandScript.END_TURN:
+				return command
 	if String(commands[0].get("type", "")) == MatchCommandScript.SWITCH_PROFESSION:
 		return commands[0]
 	if String(commands[0].get("type", "")) == MatchCommandScript.DISCARD_CARDS:

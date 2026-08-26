@@ -130,6 +130,8 @@ func submit_command(command: Dictionary) -> bool:
 		return false
 	command_log.append(command.duplicate(true))
 	var command_type: String = String(command.get("type", ""))
+	if command_type != MatchCommandScript.SWITCH_PROFESSION and command_type != MatchCommandScript.RESPOND and command_type != MatchCommandScript.DISCARD_CARDS:
+		players[active_player_index]["turn_commands"] = int(players[active_player_index].get("turn_commands", 0)) + 1
 	var payload: Dictionary = command.get("payload", {}) as Dictionary
 	var tiebreak_snapshot: Array[Dictionary] = _capture_tiebreak_snapshot(_alive_player_ids())
 	match command_type:
@@ -338,6 +340,7 @@ func deterministic_snapshot() -> Dictionary:
 			"profession_discard": (player_state.get("profession_discard", []) as Array).duplicate(),
 			"statuses": (player_state["statuses"] as Dictionary).duplicate(true),
 			"skills_used": (player_state.get("skills_used", {}) as Dictionary).duplicate(),
+			"turn_commands": int(player_state.get("turn_commands", 0)),
 			"alive": bool(player_state["alive"])
 		})
 	return {
@@ -450,6 +453,7 @@ func _create_players(roster: Array[String]) -> void:
 			"stats": {"damage_dealt": 0, "eliminations": 0},
 			"flags": {},
 			"skills_used": {},
+			"turn_commands": 0,
 			"match_flags": {},
 			"last_card_id": "",
 			"public_card_history": [],
@@ -490,6 +494,7 @@ func _begin_turn() -> void:
 		"extra_action_used": false
 	}
 	active["skills_used"] = {}
+	active["turn_commands"] = 0
 	players[active_player_index] = active
 	var status_snapshot: Array[Dictionary] = _capture_tiebreak_snapshot(_alive_player_ids())
 	_tick_start_statuses(active_player_index)

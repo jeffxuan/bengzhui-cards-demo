@@ -31,6 +31,11 @@ func _init() -> void:
 
 func _test_content_contract() -> void:
 	_expect(bool(catalog.call("is_valid")), "Content catalog must validate.")
+	var instances: Array = catalog.get("card_instances") as Array
+	_expect(instances.size() == (catalog.get("cards") as Array).size(), "Legacy logical cards must each receive one instance.")
+	var slash_instance: Dictionary = catalog.call("card_instance", "slash#001") as Dictionary
+	_expect(String(slash_instance.get("card_id", "")) == "slash", "Card instances must retain their logical card ID.")
+	_expect(String(slash_instance.get("suit", "")) == "none" and int(slash_instance.get("rank", -1)) == 0, "Legacy cards must normalize neutral suit metadata.")
 	_expect(int(rules.get("version", 0)) == 4, "Rules must be v4.")
 	_expect(not rules.has("round_limit"), "Round limit must be removed.")
 	for character_value: Variant in catalog.get("characters") as Array:

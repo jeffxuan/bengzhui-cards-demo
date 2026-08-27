@@ -13,13 +13,19 @@ const SUPPORTED_EFFECTS: Array[String] = [
 ]
 const LAUNCH_STATUS_IDS: Array[String] = ["paralyze", "bleed", "poison", "confusion", "hidden", "scorch"]
 const MODIFIER_IDS: Array[String] = ["free_cast", "echo"]
+const SUIT_IDS: Array[String] = ["none", "hearts", "diamonds", "clubs", "spades"]
+const COLOR_IDS: Array[String] = ["none", "red", "black"]
+const RANK_MIN := 0
+const RANK_MAX := 13
 
 var version: int = 1
 var cards: Array[Dictionary] = []
+var card_instances: Array[Dictionary] = []
 var characters: Array[Dictionary] = []
 var events: Array[Dictionary] = []
 var statuses: Array[Dictionary] = []
 var cards_by_id: Dictionary = {}
+var cards_by_instance_id: Dictionary = {}
 var characters_by_id: Dictionary = {}
 var statuses_by_id: Dictionary = {}
 var validation_errors: Array[String] = []
@@ -35,6 +41,10 @@ func is_valid() -> bool:
 
 func card(card_id: String) -> Dictionary:
 	return cards_by_id.get(card_id, {}) as Dictionary
+
+
+func card_instance(instance_id: String) -> Dictionary:
+	return cards_by_instance_id.get(instance_id, {}) as Dictionary
 
 
 func character(character_id: String) -> Dictionary:
@@ -54,12 +64,22 @@ func market_card_ids() -> Array[String]:
 	return result
 
 
+func market_card_instance_ids() -> Array[String]:
+	var result: Array[String] = []
+	for instance: Dictionary in card_instances:
+		var instance_id := String(instance.get("instance_id", ""))
+		if not instance_id.is_empty():
+			result.append(instance_id)
+	return result
+
+
 func _load_all() -> void:
 	var card_document: Dictionary = _load_document(CARD_PATH)
 	var character_document: Dictionary = _load_document(CHARACTER_PATH)
 	var event_document: Dictionary = _load_document(EVENT_PATH)
 	var status_document: Dictionary = _load_document(STATUS_PATH)
 	cards = _dictionary_array(card_document.get("cards", []))
+	_normalize_cards()
 	characters = _dictionary_array(character_document.get("characters", []))
 	events = _dictionary_array(event_document.get("events", []))
 	statuses = _dictionary_array(status_document.get("statuses", []))
@@ -71,6 +91,7 @@ func _load_all() -> void:
 		)
 	)
 	_index_definitions(cards, cards_by_id, "card")
+	_build_card_instances()
 	_index_definitions(characters, characters_by_id, "character")
 	_index_definitions(statuses, statuses_by_id, "status")
 	_validate()
@@ -108,6 +129,47 @@ func _index_definitions(definitions: Array[Dictionary], target: Dictionary, kind
 			target[definition_id] = definition
 
 
+func _normalize_cards() -> void:
+	# Older content stores one logical definition per card. Normalize metadata here
+	# so new content can opt into copies without changing the runtime contract.
+	for definition: Dictionary in cards:
+		if not definition.has("suit"):
+			definition["suit"] = "none"
+		if not definition.has("rank"):
+			definition["rank"] = 0
+		if not definition.has("color"):
+			definition["color"] = _color_for_suit(String(definition.get("suit", "none")))
+		if not definition.has("durability"):
+			definition["durability"] = 0
+		if not definition.has("copies"):
+			definition["copies"] = 1
+		if not definition.has("provisional"):
+			definition["provisional"] = false
+
+
+func _build_card_instances() -> void:
+	card_instances.clear()
+	cards_by_instance_id.clear()
+	for definition: Dictionary in cards:
+		var card_id := String(definition.get("id", ""))
+		var copies := maxi(1, int(definition.get("copies", 1)))
+		for copy_index in range(copies):
+			var instance := definition.duplicate(true)
+			var instance_id := "%s#%03d" % [card_id, copy_index + 1]
+			instance["instance_id"] = instance_id
+			instance["card_id"] = card_id
+			card_instances.append(instance)
+			cards_by_instance_id[instance_id] = instance
+
+
+func _color_for_suit(suit: String) -> String:
+	if suit == "hearts" or suit == "diamonds":
+		return "red"
+	if suit == "clubs" or suit == "spades":
+		return "black"
+	return "none"
+
+
 func _validate() -> void:
 	if cards.size() != 80:
 		validation_errors.append("Expected 80 cards, found %d." % cards.size())
@@ -126,12 +188,35 @@ func _validate() -> void:
 func _validate_cards() -> void:
 	for card_definition: Dictionary in cards:
 		var card_id: String = String(card_definition.get("id", "unknown"))
-		for key: String in ["name_key", "name", "category", "profession", "cost", "price", "target", "range", "effects", "tags", "description"]:
+		for key: String in ["name_key", "name", "category", "profession", "cost", "price", "target", "range", "effects", "tags", "description", "suit", "rank", "color", "durability", "copies", "provisional"]:
 			if not card_definition.has(key):
 				validation_errors.append("Card %s is missing %s." % [card_id, key])
-			_validate_effects(card_definition.get("effects", []), "card %s" % card_id)
-			if String(card_definition.get("category", "")) == "response" and not ["heavenly_sense", "shrug_off"].has(card_id):
-				validation_errors.append("Response card %s is not allowed in v4." % card_id)
+		_validate_card_metadata(card_definition)
+		_validate_effects(card_definition.get("effects", []), "card %s" % card_id)
+		if String(card_definition.get("category", "")) == "response" and not ["heavenly_sense", "shrug_off"].has(card_id):
+			validation_errors.append("Response card %s is not allowed in v4." % card_id)
+	if cards_by_instance_id.size() != card_instances.size():
+		validation_errors.append("Card instance IDs must be globally unique.")
+
+
+func _validate_card_metadata(card_definition: Dictionary) -> void:
+	var card_id := String(card_definition.get("id", "unknown"))
+	var suit := String(card_definition.get("suit", ""))
+	var color := String(card_definition.get("color", ""))
+	var rank := int(card_definition.get("rank", -1))
+	var copies := int(card_definition.get("copies", 0))
+	if not SUIT_IDS.has(suit):
+		validation_errors.append("Card %s has invalid suit %s." % [card_id, suit])
+	if not COLOR_IDS.has(color) or color != _color_for_suit(suit):
+		validation_errors.append("Card %s has invalid color %s for suit %s." % [card_id, color, suit])
+	if rank < RANK_MIN or rank > RANK_MAX:
+		validation_errors.append("Card %s has invalid rank %d." % [card_id, rank])
+	if copies < 1:
+		validation_errors.append("Card %s must have at least one copy." % card_id)
+	if int(card_definition.get("durability", 0)) < 0:
+		validation_errors.append("Card %s cannot have negative durability." % card_id)
+	if not card_definition.get("provisional", false) is bool:
+		validation_errors.append("Card %s provisional must be boolean." % card_id)
 
 
 func _validate_characters() -> void:

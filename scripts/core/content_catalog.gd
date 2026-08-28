@@ -4,6 +4,7 @@ extends RefCounted
 const CARD_PATH := "res://rules/cards.json"
 const CHARACTER_PATH := "res://rules/characters.json"
 const EVENT_PATH := "res://rules/events.json"
+const NEW_EVENT_PATH := "res://rules/events_new.json"
 const STATUS_PATH := "res://rules/statuses.json"
 const EFFECT_ALIASES_PATH := "res://rules/effect_aliases.json"
 const SUPPORTED_EFFECTS: Array[String] = [
@@ -24,6 +25,7 @@ var cards: Array[Dictionary] = []
 var card_instances: Array[Dictionary] = []
 var characters: Array[Dictionary] = []
 var events: Array[Dictionary] = []
+var staged_events: Array[Dictionary] = []
 var statuses: Array[Dictionary] = []
 var effect_aliases: Dictionary = {}
 var cards_by_id: Dictionary = {}
@@ -111,6 +113,8 @@ func _load_all() -> void:
 	_normalize_cards()
 	characters = _dictionary_array(character_document.get("characters", []))
 	events = _dictionary_array(event_document.get("events", []))
+	var new_event_document: Dictionary = _load_document(NEW_EVENT_PATH)
+	staged_events = _dictionary_array(new_event_document.get("events", []))
 	statuses = _dictionary_array(status_document.get("statuses", []))
 	effect_aliases = aliases_document.get("aliases", {}) as Dictionary
 	version = maxi(
@@ -212,6 +216,7 @@ func _validate() -> void:
 	_validate_cards()
 	_validate_characters()
 	_validate_events()
+	_validate_staged_events()
 	_validate_statuses()
 
 
@@ -306,6 +311,21 @@ func _validate_events() -> void:
 			_validate_effects(event_definition.get("effects", []), "event %s" % event_id)
 	if int(category_counts["reward"]) != 8 or int(category_counts["choice"]) != 4 or int(category_counts["pressure"]) != 4:
 		validation_errors.append("Event categories must be 8 reward / 4 choice / 4 pressure.")
+
+
+func _validate_staged_events() -> void:
+	var seen: Dictionary = {}
+	for event_definition: Dictionary in staged_events:
+		var event_id := String(event_definition.get("id", ""))
+		if event_id.is_empty() or seen.has(event_id):
+			validation_errors.append("Staged event IDs must be non-empty and unique.")
+		seen[event_id] = true
+		for key: String in ["title", "source_text", "effects", "provisional"]:
+			if not event_definition.has(key):
+				validation_errors.append("Staged event %s is missing %s." % [event_id, key])
+		if not bool(event_definition.get("provisional", false)):
+			validation_errors.append("Staged event %s must be marked provisional until mapped." % event_id)
+		_validate_effects(event_definition.get("effects", []), "staged event %s" % event_id)
 
 
 func _validate_statuses() -> void:

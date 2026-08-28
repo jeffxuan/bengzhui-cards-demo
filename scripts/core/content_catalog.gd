@@ -136,6 +136,26 @@ func staged_skill(character_id: String, skill_id: String) -> Dictionary:
 	return {}
 
 
+func executable_staged_skill(character_id: String, skill_id: String) -> Dictionary:
+	var source: Dictionary = staged_skill(character_id, skill_id)
+	if source.is_empty():
+		return {}
+	var result := source.duplicate(true)
+	result["category"] = "skill"
+	result["cost"] = {"stamina": 0, "mana": 0}
+	result["target"] = "all_enemies_in_range"
+	result["range"] = 2
+	result["effects"] = []
+	if skill_id == "q_thunderstorm":
+		result["effects"] = [{"op": "damage", "amount": 3, "kind": "lightning"}, {"op": "status", "status": "paralyze", "stacks": 1}]
+		result["provisional"] = true
+		result["provisional_notes"] = ["弃牌点数和为23的前置条件尚未接入", "更改雷暴点数并摸牌尚未接入", "范围暂按引擎半径2的方形范围执行"]
+	else:
+		result["effects"] = [{"op": "provisional", "text": String(source.get("source_text", ""))}]
+		result["provisional"] = true
+	return result
+
+
 func staged_instance_ids_for_profession(profession: String) -> Array[String]:
 	var result: Array[String] = []
 	for definition: Dictionary in staged_cards:

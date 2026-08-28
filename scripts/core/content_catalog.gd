@@ -5,11 +5,12 @@ const CARD_PATH := "res://rules/cards.json"
 const CHARACTER_PATH := "res://rules/characters.json"
 const EVENT_PATH := "res://rules/events.json"
 const STATUS_PATH := "res://rules/statuses.json"
+const EFFECT_ALIASES_PATH := "res://rules/effect_aliases.json"
 const SUPPORTED_EFFECTS: Array[String] = [
 	"damage", "self_damage", "heal", "armor", "resource", "draw", "draw_target",
 	"status", "remove_status", "cleanse", "coins", "extra_action", "extra_move",
 	"push", "break_armor", "steal_card", "self_discard", "discard_or_damage",
-	"recover_last_card", "reveal_hand", "equip", "negate", "reflect", "modifier"
+	"recover_last_card", "reveal_hand", "equip", "negate", "reflect", "modifier", "provisional"
 ]
 const LAUNCH_STATUS_IDS: Array[String] = ["paralyze", "bleed", "poison", "confusion", "hidden", "scorch"]
 const MODIFIER_IDS: Array[String] = ["free_cast", "echo"]
@@ -24,6 +25,7 @@ var card_instances: Array[Dictionary] = []
 var characters: Array[Dictionary] = []
 var events: Array[Dictionary] = []
 var statuses: Array[Dictionary] = []
+var effect_aliases: Dictionary = {}
 var cards_by_id: Dictionary = {}
 var cards_by_instance_id: Dictionary = {}
 var characters_by_id: Dictionary = {}
@@ -55,6 +57,21 @@ func status(status_id: String) -> Dictionary:
 	return statuses_by_id.get(status_id, {}) as Dictionary
 
 
+func provisional_report() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for definition: Dictionary in cards:
+		if bool(definition.get("provisional", false)):
+			result.append({"kind": "card", "id": definition.get("id", ""), "description": definition.get("description", "")})
+	for character_definition: Dictionary in characters:
+		for skill_value: Variant in character_definition.get("skills", []) as Array:
+			if skill_value is Dictionary and bool((skill_value as Dictionary).get("provisional", false)):
+				result.append({"kind": "skill", "id": (skill_value as Dictionary).get("id", ""), "description": (skill_value as Dictionary).get("description", "")})
+	for event_definition: Dictionary in events:
+		if bool(event_definition.get("provisional", false)):
+			result.append({"kind": "event", "id": event_definition.get("id", ""), "description": event_definition.get("description", "")})
+	return result
+
+
 func market_card_ids() -> Array[String]:
 	var result: Array[String] = []
 	for card_definition: Dictionary in cards:
@@ -78,11 +95,13 @@ func _load_all() -> void:
 	var character_document: Dictionary = _load_document(CHARACTER_PATH)
 	var event_document: Dictionary = _load_document(EVENT_PATH)
 	var status_document: Dictionary = _load_document(STATUS_PATH)
+	var aliases_document: Dictionary = _load_document(EFFECT_ALIASES_PATH)
 	cards = _dictionary_array(card_document.get("cards", []))
 	_normalize_cards()
 	characters = _dictionary_array(character_document.get("characters", []))
 	events = _dictionary_array(event_document.get("events", []))
 	statuses = _dictionary_array(status_document.get("statuses", []))
+	effect_aliases = aliases_document.get("aliases", {}) as Dictionary
 	version = maxi(
 		int(card_document.get("version", 1)),
 		maxi(
@@ -303,6 +322,9 @@ func _validate_effects(effect_values: Variant, owner: String) -> void:
 		var operation: String = String(effect.get("op", ""))
 		if not SUPPORTED_EFFECTS.has(operation):
 			validation_errors.append("%s uses unsupported effect %s." % [owner, operation])
+		elif operation == "provisional":
+			if String(effect.get("alias", effect.get("text", ""))).is_empty():
+				validation_errors.append("%s provisional effect must include alias or text." % owner)
 		elif operation == "status" or operation == "remove_status":
 			var status_id: String = String(effect.get("status", ""))
 			if not statuses_by_id.has(status_id):

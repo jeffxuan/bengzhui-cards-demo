@@ -39,7 +39,8 @@ func _test_content_contract() -> void:
 	_expect(String(resolved_instance.get("id", "")) == "slash", "Card lookup must resolve instance IDs.")
 	_expect(String(catalog.call("logical_card_id", "slash#001")) == "slash", "Logical card ID lookup must resolve instances.")
 	_expect(String(slash_instance.get("suit", "")) == "none" and int(slash_instance.get("rank", -1)) == 0, "Legacy cards must normalize neutral suit metadata.")
-	_expect((catalog.call("provisional_report") as Array).size() == 192, "Provisional report must include staged cards and events.")
+	_expect((catalog.call("provisional_report") as Array).size() == 200, "Provisional report must include staged cards, events, and characters.")
+	_expect((catalog.get("staged_characters") as Array).size() == 8, "新版首发角色暂存清单应包含8名角色。")
 	_expect((catalog.get("staged_events") as Array).size() == 27, "新版事件暂存清单应包含文档中的27个事件。")
 	_expect((catalog.get("staged_cards") as Array).size() == 165, "新版通用牌及六个职业牌暂存清单应包含165种牌。")
 	var staged_instance: Dictionary = catalog.call("staged_card_instance", "slash_new", 0) as Dictionary

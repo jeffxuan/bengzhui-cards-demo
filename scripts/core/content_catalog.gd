@@ -6,6 +6,7 @@ const CHARACTER_PATH := "res://rules/characters.json"
 const EVENT_PATH := "res://rules/events.json"
 const NEW_EVENT_PATH := "res://rules/events_new.json"
 const NEW_CARD_PATH := "res://rules/cards_new.json"
+const NEW_CHARACTER_PATH := "res://rules/characters_new.json"
 const STATUS_PATH := "res://rules/statuses.json"
 const EFFECT_ALIASES_PATH := "res://rules/effect_aliases.json"
 const SUPPORTED_EFFECTS: Array[String] = [
@@ -28,6 +29,7 @@ var characters: Array[Dictionary] = []
 var events: Array[Dictionary] = []
 var staged_events: Array[Dictionary] = []
 var staged_cards: Array[Dictionary] = []
+var staged_characters: Array[Dictionary] = []
 var statuses: Array[Dictionary] = []
 var effect_aliases: Dictionary = {}
 var cards_by_id: Dictionary = {}
@@ -88,6 +90,8 @@ func provisional_report() -> Array[Dictionary]:
 		result.append({"kind": "staged_card", "id": card_definition.get("id", ""), "description": card_definition.get("source_text", "")})
 	for event_definition: Dictionary in staged_events:
 		result.append({"kind": "staged_event", "id": event_definition.get("id", ""), "description": event_definition.get("source_text", "")})
+	for character_definition: Dictionary in staged_characters:
+		result.append({"kind": "staged_character", "id": character_definition.get("id", ""), "description": character_definition.get("name", "")})
 	return result
 
 
@@ -177,6 +181,8 @@ func _load_all() -> void:
 	for staged_card: Dictionary in staged_cards:
 		if not staged_card.has("cost"):
 			staged_card["cost"] = {"stamina": 0, "mana": 0}
+	var new_character_document: Dictionary = _load_document(NEW_CHARACTER_PATH)
+	staged_characters = _dictionary_array(new_character_document.get("characters", []))
 	statuses = _dictionary_array(status_document.get("statuses", []))
 	effect_aliases = aliases_document.get("aliases", {}) as Dictionary
 	version = maxi(
@@ -280,6 +286,7 @@ func _validate() -> void:
 	_validate_events()
 	_validate_staged_events()
 	_validate_staged_cards()
+	_validate_staged_characters()
 	_validate_statuses()
 
 
@@ -422,6 +429,23 @@ func _validate_staged_cards() -> void:
 			if not SUIT_IDS.has(String(instance.get("suit", ""))) or int(instance.get("rank", -1)) < 1 or int(instance.get("rank", -1)) > 13:
 				validation_errors.append("Staged card %s has invalid suit/rank instance." % card_id)
 		_validate_effects(card_definition.get("effects", []), "staged card %s" % card_id)
+
+
+func _validate_staged_characters() -> void:
+	var seen: Dictionary = {}
+	for definition: Dictionary in staged_characters:
+		var character_id := String(definition.get("id", ""))
+		if character_id.is_empty() or seen.has(character_id):
+			validation_errors.append("Staged character IDs must be non-empty and unique.")
+		seen[character_id] = true
+		for key: String in ["name", "professions", "health", "stamina", "mana", "passive", "skills", "provisional"]:
+			if not definition.has(key):
+				validation_errors.append("Staged character %s is missing %s." % [character_id, key])
+		if not bool(definition.get("provisional", false)):
+			validation_errors.append("Staged character %s must be marked provisional until mapped." % character_id)
+		var skills: Array = definition.get("skills", []) as Array
+		if skills.is_empty():
+			validation_errors.append("Staged character %s must have at least one skill." % character_id)
 
 
 func _validate_statuses() -> void:

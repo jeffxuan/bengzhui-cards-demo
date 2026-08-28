@@ -119,6 +119,9 @@ func _load_all() -> void:
 	staged_events = _dictionary_array(new_event_document.get("events", []))
 	var new_card_document: Dictionary = _load_document(NEW_CARD_PATH)
 	staged_cards = _dictionary_array(new_card_document.get("cards", []))
+	for staged_card: Dictionary in staged_cards:
+		if not staged_card.has("cost"):
+			staged_card["cost"] = {"stamina": 0, "mana": 0}
 	statuses = _dictionary_array(status_document.get("statuses", []))
 	effect_aliases = aliases_document.get("aliases", {}) as Dictionary
 	version = maxi(
@@ -345,6 +348,8 @@ func _validate_staged_cards() -> void:
 				validation_errors.append("Staged card %s is missing %s." % [card_id, key])
 		if not bool(card_definition.get("provisional", false)):
 			validation_errors.append("Staged card %s must be marked provisional until mapped." % card_id)
+		if String(card_definition.get("category", "")) == "equipment" and card_definition.get("durability", null) != null and int(card_definition.get("durability", -1)) < 0:
+			validation_errors.append("Staged equipment %s has invalid durability." % card_id)
 		var instances: Array = card_definition.get("instances", []) as Array
 		if instances.is_empty():
 			validation_errors.append("Staged card %s must contain at least one instance." % card_id)

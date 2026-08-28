@@ -41,7 +41,7 @@ func _test_content_contract() -> void:
 	_expect(String(slash_instance.get("suit", "")) == "none" and int(slash_instance.get("rank", -1)) == 0, "Legacy cards must normalize neutral suit metadata.")
 	_expect((catalog.call("provisional_report") as Array).is_empty(), "Current baseline should not contain untracked provisional content.")
 	_expect((catalog.get("staged_events") as Array).size() == 27, "新版事件暂存清单应包含文档中的27个事件。")
-	_expect((catalog.get("staged_cards") as Array).size() == 17, "新版通用牌第一批暂存清单应包含17种牌。")
+	_expect((catalog.get("staged_cards") as Array).size() == 36, "新版通用牌第一批暂存清单应包含36种牌。")
 	_expect(int(rules.get("version", 0)) == 4, "Rules must be v4.")
 	_expect(not rules.has("round_limit"), "Round limit must be removed.")
 	for character_value: Variant in catalog.get("characters") as Array:

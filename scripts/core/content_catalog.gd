@@ -84,7 +84,29 @@ func provisional_report() -> Array[Dictionary]:
 	for event_definition: Dictionary in events:
 		if bool(event_definition.get("provisional", false)):
 			result.append({"kind": "event", "id": event_definition.get("id", ""), "description": event_definition.get("description", "")})
+	for card_definition: Dictionary in staged_cards:
+		result.append({"kind": "staged_card", "id": card_definition.get("id", ""), "description": card_definition.get("source_text", "")})
+	for event_definition: Dictionary in staged_events:
+		result.append({"kind": "staged_event", "id": event_definition.get("id", ""), "description": event_definition.get("source_text", "")})
 	return result
+
+
+func staged_card_instance(card_id: String, copy_index: int) -> Dictionary:
+	for definition: Dictionary in staged_cards:
+		if String(definition.get("id", "")) != card_id:
+			continue
+		var instances: Array = definition.get("instances", []) as Array
+		if copy_index < 0 or copy_index >= instances.size():
+			return {}
+		var instance: Dictionary = instances[copy_index] as Dictionary
+		var result := definition.duplicate(true)
+		result["card_id"] = card_id
+		result["instance_id"] = "%s#%03d" % [card_id, copy_index + 1]
+		result["suit"] = instance.get("suit", "none")
+		result["rank"] = int(instance.get("rank", 0))
+		result["color"] = _color_for_suit(String(result.get("suit", "none")))
+		return result
+	return {}
 
 
 func market_card_ids() -> Array[String]:
@@ -338,6 +360,7 @@ func _validate_staged_events() -> void:
 
 func _validate_staged_cards() -> void:
 	var seen: Dictionary = {}
+	var instance_seen: Dictionary = {}
 	for card_definition: Dictionary in staged_cards:
 		var card_id := String(card_definition.get("id", ""))
 		if card_id.is_empty() or seen.has(card_id):
@@ -353,11 +376,16 @@ func _validate_staged_cards() -> void:
 		var instances: Array = card_definition.get("instances", []) as Array
 		if instances.is_empty():
 			validation_errors.append("Staged card %s must contain at least one instance." % card_id)
-		for instance_value: Variant in instances:
+		for instance_index: int in instances.size():
+			var instance_value: Variant = instances[instance_index]
 			if not instance_value is Dictionary:
 				validation_errors.append("Staged card %s has an invalid instance." % card_id)
 				continue
 			var instance: Dictionary = instance_value as Dictionary
+			var instance_id := "%s#%03d" % [card_id, instance_index + 1]
+			if instance_seen.has(instance_id):
+				validation_errors.append("Staged card instance ID %s is duplicated." % instance_id)
+			instance_seen[instance_id] = true
 			if not SUIT_IDS.has(String(instance.get("suit", ""))) or int(instance.get("rank", -1)) < 1 or int(instance.get("rank", -1)) > 13:
 				validation_errors.append("Staged card %s has invalid suit/rank instance." % card_id)
 		_validate_effects(card_definition.get("effects", []), "staged card %s" % card_id)

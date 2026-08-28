@@ -39,9 +39,11 @@ func _test_content_contract() -> void:
 	_expect(String(resolved_instance.get("id", "")) == "slash", "Card lookup must resolve instance IDs.")
 	_expect(String(catalog.call("logical_card_id", "slash#001")) == "slash", "Logical card ID lookup must resolve instances.")
 	_expect(String(slash_instance.get("suit", "")) == "none" and int(slash_instance.get("rank", -1)) == 0, "Legacy cards must normalize neutral suit metadata.")
-	_expect((catalog.call("provisional_report") as Array).is_empty(), "Current baseline should not contain untracked provisional content.")
+	_expect((catalog.call("provisional_report") as Array).size() == 192, "Provisional report must include staged cards and events.")
 	_expect((catalog.get("staged_events") as Array).size() == 27, "新版事件暂存清单应包含文档中的27个事件。")
 	_expect((catalog.get("staged_cards") as Array).size() == 165, "新版通用牌及六个职业牌暂存清单应包含165种牌。")
+	var staged_instance: Dictionary = catalog.call("staged_card_instance", "slash_new", 0) as Dictionary
+	_expect(String(staged_instance.get("instance_id", "")) == "slash_new#001" and String(staged_instance.get("suit", "")) == "spades", "Staged card instances must resolve suit and ID.")
 	_expect(int(rules.get("version", 0)) == 4, "Rules must be v4.")
 	_expect(not rules.has("round_limit"), "Round limit must be removed.")
 	for character_value: Variant in catalog.get("characters") as Array:

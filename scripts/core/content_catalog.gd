@@ -121,6 +121,21 @@ func staged_card_ids_for_profession(profession: String) -> Array[String]:
 	return result
 
 
+func staged_character(character_id: String) -> Dictionary:
+	for definition: Dictionary in staged_characters:
+		if String(definition.get("id", "")) == character_id:
+			return definition
+	return {}
+
+
+func staged_skill(character_id: String, skill_id: String) -> Dictionary:
+	var definition: Dictionary = staged_character(character_id)
+	for skill_value: Variant in definition.get("skills", []) as Array:
+		if skill_value is Dictionary and String((skill_value as Dictionary).get("id", "")) == skill_id:
+			return skill_value as Dictionary
+	return {}
+
+
 func staged_instance_ids_for_profession(profession: String) -> Array[String]:
 	var result: Array[String] = []
 	for definition: Dictionary in staged_cards:

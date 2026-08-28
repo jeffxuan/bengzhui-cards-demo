@@ -41,6 +41,10 @@ func _test_content_contract() -> void:
 	_expect(String(slash_instance.get("suit", "")) == "none" and int(slash_instance.get("rank", -1)) == 0, "Legacy cards must normalize neutral suit metadata.")
 	_expect((catalog.call("provisional_report") as Array).size() == 200, "Provisional report must include staged cards, events, and characters.")
 	_expect((catalog.get("staged_characters") as Array).size() == 8, "新版首发角色暂存清单应包含8名角色。")
+	var q_staged: Dictionary = catalog.call("staged_character", "q") as Dictionary
+	_expect((q_staged.get("professions", []) as Array).size() == 2, "Q must expose both revised professions.")
+	var q_skill: Dictionary = catalog.call("staged_skill", "q", "q_thunderstorm") as Dictionary
+	_expect(not q_skill.is_empty() and bool(q_skill.get("source_text", "") != ""), "Staged character skills must be addressable by stable ID.")
 	_expect((catalog.get("staged_events") as Array).size() == 27, "新版事件暂存清单应包含文档中的27个事件。")
 	_expect((catalog.get("staged_cards") as Array).size() == 165, "新版通用牌及六个职业牌暂存清单应包含165种牌。")
 	var staged_instance: Dictionary = catalog.call("staged_card_instance", "slash_new", 0) as Dictionary

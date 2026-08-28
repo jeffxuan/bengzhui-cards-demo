@@ -42,11 +42,22 @@ func is_valid() -> bool:
 
 
 func card(card_id: String) -> Dictionary:
-	return cards_by_id.get(card_id, {}) as Dictionary
+	if cards_by_id.has(card_id):
+		return cards_by_id.get(card_id, {}) as Dictionary
+	if cards_by_instance_id.has(card_id):
+		return cards_by_instance_id.get(card_id, {}) as Dictionary
+	return {}
 
 
 func card_instance(instance_id: String) -> Dictionary:
 	return cards_by_instance_id.get(instance_id, {}) as Dictionary
+
+
+func logical_card_id(value: String) -> String:
+	if cards_by_id.has(value):
+		return value
+	var instance: Dictionary = card_instance(value)
+	return String(instance.get("card_id", ""))
 
 
 func character(character_id: String) -> Dictionary:

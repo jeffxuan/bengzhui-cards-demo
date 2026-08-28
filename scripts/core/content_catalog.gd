@@ -129,6 +129,19 @@ func staged_instance_ids_for_profession(profession: String) -> Array[String]:
 	return result
 
 
+func staged_draw_pool_for_profession(profession: String, include_common: bool = true) -> Array[String]:
+	var result: Array[String] = []
+	for definition: Dictionary in staged_cards:
+		var card_profession := String(definition.get("profession", ""))
+		if card_profession != profession and not (include_common and card_profession == "neutral"):
+			continue
+		var card_id := String(definition.get("id", ""))
+		var instances: Array = definition.get("instances", []) as Array
+		for index: int in instances.size():
+			result.append("%s#%03d" % [card_id, index + 1])
+	return result
+
+
 func market_card_ids() -> Array[String]:
 	var result: Array[String] = []
 	for card_definition: Dictionary in cards:

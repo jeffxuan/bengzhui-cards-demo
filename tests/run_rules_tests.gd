@@ -46,6 +46,9 @@ func _test_content_contract() -> void:
 	_expect(String(staged_instance.get("instance_id", "")) == "slash_new#001" and String(staged_instance.get("suit", "")) == "spades", "Staged card instances must resolve suit and ID.")
 	_expect((catalog.call("staged_card_ids_for_profession", "berserker") as Array).size() == 21, "Berserker staged pool must expose 21 definitions.")
 	_expect((catalog.call("staged_instance_ids_for_profession", "shooter") as Array).size() == 75, "Shooter staged pool must expose 75 instances.")
+	var shooter_pool: Array = catalog.call("staged_draw_pool_for_profession", "shooter") as Array
+	_expect(shooter_pool.has("slash_new#001") and shooter_pool.has("sniper_new#001"), "Profession draw pool must include common and current-profession cards.")
+	_expect(not shooter_pool.has("berserker_blow_new#001"), "Profession draw pool must exclude other professions.")
 	_expect(int(rules.get("version", 0)) == 4, "Rules must be v4.")
 	_expect(not rules.has("round_limit"), "Round limit must be removed.")
 	for character_value: Variant in catalog.get("characters") as Array:

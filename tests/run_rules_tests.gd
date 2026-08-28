@@ -80,7 +80,9 @@ func _test_turn_resources_and_free_character_skills() -> void:
 		_expect(bool(state.call("submit_command", command)), "Free character skill should resolve.")
 		_expect(int((state.call("player", 0) as Dictionary).get("actions", 0)) == 2, "Character skills must not be limited by action points.")
 		var repeated: Dictionary = _find_command(state, MatchCommandScript.USE_SKILL, "q_thunder_call")
-		_expect(repeated.is_empty(), "Each character skill must be limited to once per turn.")
+		_expect(not repeated.is_empty(), "Skills without an explicit uses_per_turn limit must be reusable.")
+		if not repeated.is_empty():
+			_expect(bool(state.call("submit_command", repeated)), "A reusable skill should resolve a second time.")
 
 
 func _test_response_window_resources() -> void:
@@ -155,6 +157,12 @@ func _test_targeting_and_public_history() -> void:
 	state.players[1] = target
 	var preview: Dictionary = state.call("targeting_preview", 0, MatchCommandScript.PLAY_CARD, "slash") as Dictionary
 	_expect(int(preview.get("range", 0)) == 1, "Slash preview must report distance one.")
+	target["position"] = Vector2i(3, 3)
+	state.players[1] = target
+	var diagonal_preview: Dictionary = state.call("targeting_preview", 0, MatchCommandScript.PLAY_CARD, "slash") as Dictionary
+	_expect(diagonal_preview.get("cells", []).has(Vector2i(3, 3)), "Range preview must use square Chebyshev distance.")
+	target["position"] = Vector2i(3, 2)
+	state.players[1] = target
 	var command: Dictionary = _find_command(state, MatchCommandScript.PLAY_CARD, "slash")
 	_expect(bool(state.call("submit_command", command)), "Previewed attack should resolve.")
 	var history: Array = (state.call("player", 0) as Dictionary).get("public_card_history", []) as Array

@@ -98,7 +98,7 @@ func targeting_preview(actor_id: int, command_type: String, definition_id: Strin
 		for y: int in range(active_bounds().position.y, active_bounds().end.y):
 			for x: int in range(active_bounds().position.x, active_bounds().end.x):
 				var cell := Vector2i(x, y)
-				if absi(cell.x - source.x) + absi(cell.y - source.y) <= range_limit:
+				if maxi(absi(cell.x - source.x), absi(cell.y - source.y)) <= range_limit:
 					cells.append(cell)
 	return {"range": range_limit, "cells": cells}
 
@@ -340,6 +340,7 @@ func deterministic_snapshot() -> Dictionary:
 			"profession_discard": (player_state.get("profession_discard", []) as Array).duplicate(),
 			"statuses": (player_state["statuses"] as Dictionary).duplicate(true),
 			"skills_used": (player_state.get("skills_used", {}) as Dictionary).duplicate(),
+			"skill_uses": (player_state.get("skill_uses", {}) as Dictionary).duplicate(),
 			"turn_commands": int(player_state.get("turn_commands", 0)),
 			"alive": bool(player_state["alive"])
 		})
@@ -453,6 +454,7 @@ func _create_players(roster: Array[String]) -> void:
 			"stats": {"damage_dealt": 0, "eliminations": 0},
 			"flags": {},
 			"skills_used": {},
+			"skill_uses": {},
 			"turn_commands": 0,
 			"match_flags": {},
 			"last_card_id": "",
@@ -494,6 +496,7 @@ func _begin_turn() -> void:
 		"extra_action_used": false
 	}
 	active["skills_used"] = {}
+	active["skill_uses"] = {}
 	active["turn_commands"] = 0
 	players[active_player_index] = active
 	var status_snapshot: Array[Dictionary] = _capture_tiebreak_snapshot(_alive_player_ids())
@@ -621,7 +624,9 @@ func _legal_skill_commands(actor_id: int) -> Array[Dictionary]:
 			continue
 		var skill: Dictionary = skill_value as Dictionary
 		var skill_id: String = String(skill.get("id", ""))
-		if bool((players[actor_id].get("skills_used", {}) as Dictionary).get(skill_id, false)):
+		var uses_per_turn := int(skill.get("uses_per_turn", 0))
+		var skill_uses := int((players[actor_id].get("skill_uses", {}) as Dictionary).get(skill_id, 0))
+		if uses_per_turn > 0 and skill_uses >= uses_per_turn:
 			continue
 		result.append_array(_target_commands(MatchCommandScript.USE_SKILL, actor_id, skill_id, skill))
 	return result
@@ -733,9 +738,9 @@ func _handle_use_skill(payload: Dictionary) -> void:
 	var skill_id: String = String(payload.get("skill_id", ""))
 	var target_id: int = int(payload.get("target_id", actor_id))
 	var skill: Dictionary = _skill_definition(actor_id, skill_id)
-	var skills_used: Dictionary = players[actor_id].get("skills_used", {}) as Dictionary
-	skills_used[skill_id] = true
-	players[actor_id]["skills_used"] = skills_used
+	var skill_uses: Dictionary = players[actor_id].get("skill_uses", {}) as Dictionary
+	skill_uses[skill_id] = int(skill_uses.get(skill_id, 0)) + 1
+	players[actor_id]["skill_uses"] = skill_uses
 	var active: Dictionary = players[actor_id]
 	active = players[actor_id]
 	players[actor_id] = active
@@ -1203,7 +1208,7 @@ func _move_range(player_id: int) -> int:
 func _distance(source_id: int, target_id: int) -> int:
 	var source: Vector2i = players[source_id].get("position", Vector2i.ZERO) as Vector2i
 	var target: Vector2i = players[target_id].get("position", Vector2i.ZERO) as Vector2i
-	return absi(source.x - target.x) + absi(source.y - target.y)
+	return maxi(absi(source.x - target.x), absi(source.y - target.y))
 
 
 func _enemies_in_range(source_id: int, range_limit: int) -> Array[int]:

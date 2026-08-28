@@ -5,6 +5,7 @@ const CARD_PATH := "res://rules/cards.json"
 const CHARACTER_PATH := "res://rules/characters.json"
 const EVENT_PATH := "res://rules/events.json"
 const NEW_EVENT_PATH := "res://rules/events_new.json"
+const NEW_CARD_PATH := "res://rules/cards_new.json"
 const STATUS_PATH := "res://rules/statuses.json"
 const EFFECT_ALIASES_PATH := "res://rules/effect_aliases.json"
 const SUPPORTED_EFFECTS: Array[String] = [
@@ -26,6 +27,7 @@ var card_instances: Array[Dictionary] = []
 var characters: Array[Dictionary] = []
 var events: Array[Dictionary] = []
 var staged_events: Array[Dictionary] = []
+var staged_cards: Array[Dictionary] = []
 var statuses: Array[Dictionary] = []
 var effect_aliases: Dictionary = {}
 var cards_by_id: Dictionary = {}
@@ -115,6 +117,8 @@ func _load_all() -> void:
 	events = _dictionary_array(event_document.get("events", []))
 	var new_event_document: Dictionary = _load_document(NEW_EVENT_PATH)
 	staged_events = _dictionary_array(new_event_document.get("events", []))
+	var new_card_document: Dictionary = _load_document(NEW_CARD_PATH)
+	staged_cards = _dictionary_array(new_card_document.get("cards", []))
 	statuses = _dictionary_array(status_document.get("statuses", []))
 	effect_aliases = aliases_document.get("aliases", {}) as Dictionary
 	version = maxi(
@@ -217,6 +221,7 @@ func _validate() -> void:
 	_validate_characters()
 	_validate_events()
 	_validate_staged_events()
+	_validate_staged_cards()
 	_validate_statuses()
 
 
@@ -326,6 +331,31 @@ func _validate_staged_events() -> void:
 		if not bool(event_definition.get("provisional", false)):
 			validation_errors.append("Staged event %s must be marked provisional until mapped." % event_id)
 		_validate_effects(event_definition.get("effects", []), "staged event %s" % event_id)
+
+
+func _validate_staged_cards() -> void:
+	var seen: Dictionary = {}
+	for card_definition: Dictionary in staged_cards:
+		var card_id := String(card_definition.get("id", ""))
+		if card_id.is_empty() or seen.has(card_id):
+			validation_errors.append("Staged card IDs must be non-empty and unique.")
+		seen[card_id] = true
+		for key: String in ["name", "category", "profession", "cost", "source_text", "instances", "effects", "provisional"]:
+			if not card_definition.has(key):
+				validation_errors.append("Staged card %s is missing %s." % [card_id, key])
+		if not bool(card_definition.get("provisional", false)):
+			validation_errors.append("Staged card %s must be marked provisional until mapped." % card_id)
+		var instances: Array = card_definition.get("instances", []) as Array
+		if instances.is_empty():
+			validation_errors.append("Staged card %s must contain at least one instance." % card_id)
+		for instance_value: Variant in instances:
+			if not instance_value is Dictionary:
+				validation_errors.append("Staged card %s has an invalid instance." % card_id)
+				continue
+			var instance: Dictionary = instance_value as Dictionary
+			if not SUIT_IDS.has(String(instance.get("suit", ""))) or int(instance.get("rank", -1)) < 1 or int(instance.get("rank", -1)) > 13:
+				validation_errors.append("Staged card %s has invalid suit/rank instance." % card_id)
+		_validate_effects(card_definition.get("effects", []), "staged card %s" % card_id)
 
 
 func _validate_statuses() -> void:

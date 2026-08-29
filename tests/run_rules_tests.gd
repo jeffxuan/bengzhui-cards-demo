@@ -261,6 +261,19 @@ func _test_thunderstorm_skill_discard() -> void:
 	_expect(int(request.get("required_rank_sum", 0)) == 23, "Thunderstorm discard request must require rank sum 23.")
 	var invalid := MatchCommandScript.make(MatchCommandScript.SKILL_DISCARD, 0, {"request_id": request.get("request_id", ""), "card_ids": ["rally_new#003"]})
 	_expect(not bool(state.call("submit_command", invalid)), "Thunderstorm must reject an incorrect rank sum.")
+	var replay_state: RefCounted = _state(["q", "ginger", "maddy", "signal"], 109)
+	var replay_q: Dictionary = replay_state.call("player", 0) as Dictionary
+	replay_q["hand"] = ["rally_new#003", "crossfire_new#003"]
+	replay_q["position"] = Vector2i(2, 2)
+	replay_state.players[0] = replay_q
+	var replay_enemy: Dictionary = replay_state.call("player", 1) as Dictionary
+	replay_enemy["position"] = Vector2i(3, 2)
+	replay_state.players[1] = replay_enemy
+	var replay_skill := _find_command(replay_state, MatchCommandScript.USE_SKILL, "q_thunderstorm")
+	replay_state.call("submit_command", replay_skill)
+	var pending_a: Dictionary = (state.call("deterministic_snapshot") as Dictionary).get("pending_skill_discard", {}) as Dictionary
+	var pending_b: Dictionary = (replay_state.call("deterministic_snapshot") as Dictionary).get("pending_skill_discard", {}) as Dictionary
+	_expect(int(pending_a.get("player_id", -1)) == int(pending_b.get("player_id", -1)) and String(pending_a.get("skill_id", "")) == String(pending_b.get("skill_id", "")) and int(pending_a.get("required_rank_sum", 0)) == int(pending_b.get("required_rank_sum", 0)) and int(pending_a.get("target_id", -2)) == int(pending_b.get("target_id", -2)), "Same seed and command must produce identical skill discard requests: %s vs %s error=%s command=%s" % [JSON.stringify(pending_a), JSON.stringify(pending_b), String(replay_state.get("last_error")), JSON.stringify(replay_skill)])
 	var valid := MatchCommandScript.make(MatchCommandScript.SKILL_DISCARD, 0, {"request_id": request.get("request_id", ""), "card_ids": ["rally_new#003", "crossfire_new#003"]})
 	_expect(bool(state.call("submit_command", valid)), "Thunderstorm should resolve after a valid rank-sum discard: %s" % String(state.get("last_error")))
 	_expect((state.get("pending_skill_discard") as Dictionary).is_empty(), "Skill discard request must clear after payment.")

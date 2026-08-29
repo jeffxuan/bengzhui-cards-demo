@@ -574,6 +574,18 @@ func _refresh_skills() -> void:
 		button.disabled = not _has_definition_command(legal, MatchCommandScript.USE_SKILL, skill_id)
 		button.pressed.connect(_select_skill.bind(skill_id))
 		skill_box.add_child(button)
+	var staged_thunderstorm: Dictionary = state.call("_skill_definition", 0, "q_thunderstorm") as Dictionary
+	if not staged_thunderstorm.is_empty() and not _has_definition_command(legal, MatchCommandScript.USE_SKILL, "q_thunderstorm"):
+		staged_thunderstorm = {}
+	if not staged_thunderstorm.is_empty():
+		var staged_button := Button.new()
+		staged_button.custom_minimum_size.y = 54
+		staged_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		staged_button.text = "%s · 弃牌点数和23 · %s\n暂存技能（provisional）" % [String(staged_thunderstorm.get("name", "雷暴")), _range_text(staged_thunderstorm)]
+		staged_button.icon = load("res://assets/third_party/lucide/sparkles.svg") as Texture2D
+		staged_button.tooltip_text = String(staged_thunderstorm.get("source_text", staged_thunderstorm.get("description", "")))
+		staged_button.pressed.connect(_select_skill.bind("q_thunderstorm"))
+		skill_box.add_child(staged_button)
 
 
 func _refresh_market() -> void:

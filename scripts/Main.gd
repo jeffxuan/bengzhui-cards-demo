@@ -973,7 +973,7 @@ func _show_player_history(player_id: int) -> void:
 	for entry_value: Variant in player_state.get("public_card_history", []) as Array:
 		var entry: Dictionary = entry_value as Dictionary
 		var definition: Dictionary = catalog.call("resolve_card", String(entry.get("card_id", ""))) as Dictionary
-		var line: Label = _label("第%d轮 · %s · %s\n%s" % [int(entry.get("round", 0)), String(definition.get("name", entry.get("card_id", ""))), _range_text(definition), String(definition.get("description", ""))], 14, COLORS["ink"] as Color)
+		var line: Label = _label("第%d轮 · %s%s · %s\n%s" % [int(entry.get("round", 0)), String(definition.get("name", entry.get("card_id", ""))), (" · " + _card_identity_text(definition)) if not _card_identity_text(definition).is_empty() else "", _range_text(definition), String(definition.get("description", ""))], 14, COLORS["ink"] as Color)
 		line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		modal_actions.add_child(line)
 	if modal_actions.get_child_count() == 0:

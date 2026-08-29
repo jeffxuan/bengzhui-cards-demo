@@ -1691,6 +1691,10 @@ func _settle_eliminations(initial_snapshot: Array[Dictionary]) -> void:
 		if pending_player_id >= 0 and not bool(players[pending_player_id].get("alive", false)):
 			pending_discard.clear()
 			discard_continuation.clear()
+	if not pending_skill_discard.is_empty():
+		var pending_skill_player_id: int = int(pending_skill_discard.get("player_id", -1))
+		if pending_skill_player_id >= 0 and not bool(players[pending_skill_player_id].get("alive", false)):
+			pending_skill_discard.clear()
 	var initial_candidate_ids: Array[int] = []
 	for candidate: Dictionary in initial_snapshot:
 		initial_candidate_ids.append(int(candidate.get("id", -1)))

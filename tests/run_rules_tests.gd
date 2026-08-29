@@ -260,6 +260,18 @@ func _test_thunderstorm_skill_discard() -> void:
 	_expect((state.get("pending_skill_discard") as Dictionary).is_empty(), "Skill discard request must clear after payment.")
 	var enemy_after: Dictionary = state.call("player", 1) as Dictionary
 	_expect(int(enemy_after.get("health", 0)) < 7 and int((enemy_after.get("statuses", {}) as Dictionary).get("paralyze", 0)) > 0, "Thunderstorm must damage and paralyze enemies in its area.")
+	var blocked_state: RefCounted = _state(["q", "ginger", "maddy", "signal"], 110)
+	var blocked_q: Dictionary = blocked_state.call("player", 0) as Dictionary
+	blocked_q["hand"] = ["rally_new#003", "crossfire_new#003"]
+	blocked_state.players[0] = blocked_q
+	var blocked_skill := _find_command(blocked_state, MatchCommandScript.USE_SKILL, "q_thunderstorm")
+	blocked_state.call("submit_command", blocked_skill)
+	blocked_q = blocked_state.call("player", 0) as Dictionary
+	blocked_q["alive"] = false
+	blocked_q["health"] = 0
+	blocked_state.players[0] = blocked_q
+	blocked_state.call("_settle_eliminations", [] as Array[Dictionary])
+	_expect((blocked_state.get("pending_skill_discard") as Dictionary).is_empty(), "A dead skill owner must not leave a blocking skill discard request.")
 
 
 func _state(roster: Array[String], seed: int) -> RefCounted:

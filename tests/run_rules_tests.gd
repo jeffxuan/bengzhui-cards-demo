@@ -52,6 +52,7 @@ func _test_content_contract() -> void:
 	var q_runtime: Dictionary = catalog.call("executable_staged_skill", "q", "q_thunderstorm") as Dictionary
 	_expect(String(q_runtime.get("target", "")) == "all_enemies_in_range" and (q_runtime.get("effects", []) as Array).size() == 2, "Q Thunderstorm must expose a provisional executable effect chain.")
 	_expect(int((q_runtime.get("discard_requirement", {}) as Dictionary).get("rank_sum", 0)) == 23, "Thunderstorm must expose its rank-sum discard requirement.")
+	_expect(not (q_runtime.get("provisional_notes", []) as Array).has("弃牌点数和为23的前置条件尚未接入"), "Thunderstorm provisional notes must not claim its implemented discard requirement is missing.")
 	_expect(int(catalog.call("staged_skill", "k", "k_brain").get("uses_per_turn", 0)) == 1, "Explicit once-per-turn skill limits must be structured.")
 	_expect(not (catalog.call("staged_skill", "ginger", "ginger_waist") as Dictionary).has("uses_per_turn"), "Skills without explicit limits must remain reusable.")
 	_expect((catalog.call("staged_instance_ids_for_suit", "spades") as Array).size() > 0, "Suit query must return staged card instances.")

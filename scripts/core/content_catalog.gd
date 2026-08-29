@@ -177,7 +177,7 @@ func executable_staged_skill(character_id: String, skill_id: String) -> Dictiona
 		result["effects"] = [{"op": "damage", "amount": 3, "kind": "lightning"}, {"op": "status", "status": "paralyze", "stacks": 1}]
 		result["discard_requirement"] = {"minimum_cards": 1, "rank_sum": 23, "selection": "hand"}
 		result["provisional"] = true
-		result["provisional_notes"] = ["弃牌点数和为23的前置条件尚未接入", "更改雷暴点数并摸牌尚未接入", "范围暂按引擎半径2的方形范围执行"]
+		result["provisional_notes"] = ["可改点数摸牌后结束回合尚未接入", "范围暂按引擎半径2的方形范围执行"]
 	else:
 		result["effects"] = [{"op": "provisional", "text": String(source.get("source_text", ""))}]
 		result["provisional"] = true

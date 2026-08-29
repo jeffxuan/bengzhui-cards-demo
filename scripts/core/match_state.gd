@@ -678,9 +678,24 @@ func _legal_skill_commands(actor_id: int) -> Array[Dictionary]:
 			break
 	if String(players[actor_id].get("character_id", "")) == "q" and staged_hand_available:
 		var staged_thunderstorm: Dictionary = _skill_definition(actor_id, "q_thunderstorm")
-		if not staged_thunderstorm.is_empty():
+		var requirement: Dictionary = staged_thunderstorm.get("discard_requirement", {}) as Dictionary
+		if not staged_thunderstorm.is_empty() and _rank_sum_selection_possible(players[actor_id].get("hand", []) as Array, int(requirement.get("rank_sum", 0)), int(requirement.get("minimum_cards", 1))):
 			result.append_array(_target_commands(MatchCommandScript.USE_SKILL, actor_id, "q_thunderstorm", staged_thunderstorm))
 	return result
+
+
+func _rank_sum_selection_possible(hand: Array, required_sum: int, minimum_count: int, index: int = 0, current_sum: int = 0, count: int = 0) -> bool:
+	if current_sum == required_sum and count >= minimum_count:
+		return true
+	if current_sum >= required_sum or index >= hand.size():
+		return false
+	for next_index: int in range(index, hand.size()):
+		var rank: int = int(catalog.call("staged_instance_rank", String(hand[next_index])))
+		if rank <= 0:
+			continue
+		if _rank_sum_selection_possible(hand, required_sum, minimum_count, next_index + 1, current_sum + rank, count + 1):
+			return true
+	return false
 
 
 func _definition_has_extra_action(definition: Dictionary) -> bool:

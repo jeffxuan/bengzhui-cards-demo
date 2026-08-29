@@ -272,6 +272,11 @@ func _test_thunderstorm_skill_discard() -> void:
 	blocked_state.players[0] = blocked_q
 	blocked_state.call("_settle_eliminations", [] as Array[Dictionary])
 	_expect((blocked_state.get("pending_skill_discard") as Dictionary).is_empty(), "A dead skill owner must not leave a blocking skill discard request.")
+	var unavailable_state: RefCounted = _state(["q", "ginger", "maddy", "signal"], 111)
+	var unavailable_q: Dictionary = unavailable_state.call("player", 0) as Dictionary
+	unavailable_q["hand"] = ["slash_new#001"]
+	unavailable_state.players[0] = unavailable_q
+	_expect(_find_command(unavailable_state, MatchCommandScript.USE_SKILL, "q_thunderstorm").is_empty(), "Thunderstorm must not be legal when its discard requirement cannot be paid.")
 
 
 func _state(roster: Array[String], seed: int) -> RefCounted:

@@ -223,6 +223,22 @@ func staged_rank_sum(instance_ids: Array) -> int:
 	return total
 
 
+func validate_rank_sum_selection(hand_instance_ids: Array, selected_instance_ids: Array, required_sum: int, minimum_count: int = 1) -> String:
+	if selected_instance_ids.size() < minimum_count:
+		return "至少选择%d张牌。" % minimum_count
+	var available: Array = hand_instance_ids.duplicate()
+	for selected_value: Variant in selected_instance_ids:
+		var selected_id := String(selected_value)
+		var index := available.find(selected_id)
+		if index < 0:
+			return "选择的牌不在当前手牌中。"
+		available.remove_at(index)
+	var actual_sum := staged_rank_sum(selected_instance_ids)
+	if actual_sum != required_sum:
+		return "所选牌点数总和必须为%d（当前为%d）。" % [required_sum, actual_sum]
+	return ""
+
+
 func _staged_instance_filter(field: String, expected: String) -> Array[String]:
 	var result: Array[String] = []
 	for definition: Dictionary in staged_cards:

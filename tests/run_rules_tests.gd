@@ -54,6 +54,10 @@ func _test_content_contract() -> void:
 	_expect((catalog.call("staged_instance_ids_for_color", "red") as Array).size() > 0, "Color query must return staged card instances.")
 	_expect((catalog.call("staged_instance_ids_for_rank", 13) as Array).size() > 0, "Rank query must return staged card instances.")
 	_expect(int(catalog.call("staged_rank_sum", ["slash_new#001", "slash_new#002"])) == 3, "Rank sum must resolve staged instance IDs.")
+	var staged_hand: Array = ["slash_new#001", "slash_new#002", "tusk_new#001", "crossfire_new#001"]
+	_expect(String(catalog.call("validate_rank_sum_selection", staged_hand, ["slash_new#001", "tusk_new#001"], 2, 1)) == "", "Rank-sum selection should accept an exact valid selection.")
+	_expect(not String(catalog.call("validate_rank_sum_selection", staged_hand, ["slash_new#001"], 2, 1)).is_empty(), "Rank-sum selection should reject an incorrect sum.")
+	_expect(not String(catalog.call("validate_rank_sum_selection", staged_hand, ["slash_new#001", "slash_new#001"], 2, 1)).is_empty(), "Rank-sum selection should reject duplicate instances.")
 	_expect((catalog.get("staged_events") as Array).size() == 27, "新版事件暂存清单应包含文档中的27个事件。")
 	_expect((catalog.get("staged_cards") as Array).size() == 165, "新版通用牌及六个职业牌暂存清单应包含165种牌。")
 	var staged_instance: Dictionary = catalog.call("staged_card_instance", "slash_new", 0) as Dictionary

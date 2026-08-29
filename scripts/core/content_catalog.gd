@@ -148,6 +148,7 @@ func executable_staged_skill(character_id: String, skill_id: String) -> Dictiona
 	result["effects"] = []
 	if skill_id == "q_thunderstorm":
 		result["effects"] = [{"op": "damage", "amount": 3, "kind": "lightning"}, {"op": "status", "status": "paralyze", "stacks": 1}]
+		result["discard_requirement"] = {"minimum_cards": 1, "rank_sum": 23, "selection": "hand"}
 		result["provisional"] = true
 		result["provisional_notes"] = ["弃牌点数和为23的前置条件尚未接入", "更改雷暴点数并摸牌尚未接入", "范围暂按引擎半径2的方形范围执行"]
 	else:
@@ -199,6 +200,27 @@ func staged_instance_ids_for_rank(rank: int) -> Array[String]:
 			if int(instance.get("rank", -1)) == rank:
 				result.append("%s#%03d" % [card_id, index + 1])
 	return result
+
+
+func rank_value(rank: int) -> int:
+	return rank
+
+
+func staged_instance_rank(instance_id: String) -> int:
+	var separator := instance_id.rfind("#")
+	if separator < 0:
+		return 0
+	var card_id := instance_id.substr(0, separator)
+	var copy_index := int(instance_id.substr(separator + 1)) - 1
+	var instance: Dictionary = staged_card_instance(card_id, copy_index)
+	return int(instance.get("rank", 0))
+
+
+func staged_rank_sum(instance_ids: Array) -> int:
+	var total := 0
+	for instance_value: Variant in instance_ids:
+		total += staged_instance_rank(String(instance_value))
+	return total
 
 
 func _staged_instance_filter(field: String, expected: String) -> Array[String]:

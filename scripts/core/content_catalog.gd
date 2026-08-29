@@ -181,6 +181,41 @@ func staged_draw_pool_for_profession(profession: String, include_common: bool = 
 	return result
 
 
+func staged_instance_ids_for_suit(suit: String) -> Array[String]:
+	return _staged_instance_filter("suit", suit)
+
+
+func staged_instance_ids_for_color(color: String) -> Array[String]:
+	return _staged_instance_filter("color", color)
+
+
+func staged_instance_ids_for_rank(rank: int) -> Array[String]:
+	var result: Array[String] = []
+	for definition: Dictionary in staged_cards:
+		var card_id := String(definition.get("id", ""))
+		var instances: Array = definition.get("instances", []) as Array
+		for index: int in instances.size():
+			var instance: Dictionary = instances[index] as Dictionary
+			if int(instance.get("rank", -1)) == rank:
+				result.append("%s#%03d" % [card_id, index + 1])
+	return result
+
+
+func _staged_instance_filter(field: String, expected: String) -> Array[String]:
+	var result: Array[String] = []
+	for definition: Dictionary in staged_cards:
+		var card_id := String(definition.get("id", ""))
+		var instances: Array = definition.get("instances", []) as Array
+		for index: int in instances.size():
+			var instance: Dictionary = instances[index] as Dictionary
+			var value := String(instance.get(field, ""))
+			if field == "color":
+				value = _color_for_suit(String(instance.get("suit", "none")))
+			if value == expected:
+				result.append("%s#%03d" % [card_id, index + 1])
+	return result
+
+
 func market_card_ids() -> Array[String]:
 	var result: Array[String] = []
 	for card_definition: Dictionary in cards:

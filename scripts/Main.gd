@@ -96,8 +96,11 @@ func _run_export_smoke() -> void:
 		var actor_id: int
 		var pending_action: Dictionary = smoke_state.get("pending_action") as Dictionary
 		var pending_discard: Dictionary = smoke_state.get("pending_discard") as Dictionary
+		var pending_skill_discard: Dictionary = smoke_state.get("pending_skill_discard") as Dictionary
 		if not pending_discard.is_empty():
 			actor_id = int(pending_discard.get("player_id", -1))
+		elif not pending_skill_discard.is_empty():
+			actor_id = int(pending_skill_discard.get("player_id", -1))
 		elif pending_action.is_empty():
 			actor_id = int((smoke_state.call("current_player") as Dictionary).get("id", -1))
 		else:

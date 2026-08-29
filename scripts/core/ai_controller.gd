@@ -17,6 +17,8 @@ func choose_command(state: RefCounted, actor_id: int) -> Dictionary:
 		return commands[0]
 	if String(commands[0].get("type", "")) == MatchCommandScript.DISCARD_CARDS:
 		return _choose_discard_command(state, actor_id, commands[0].get("payload", {}) as Dictionary)
+	if String(commands[0].get("type", "")) == MatchCommandScript.SKILL_DISCARD:
+		return _choose_skill_discard_command(state, actor_id, commands[0].get("payload", {}) as Dictionary)
 	var persona: String = String((state.call("player", actor_id) as Dictionary).get("ai_persona", "control"))
 	var best_command: Dictionary = commands[0]
 	var best_score: float = -1000000.0
@@ -75,6 +77,36 @@ func _choose_discard_command(state: RefCounted, actor_id: int, payload: Dictiona
 		"request_id": String(payload.get("request_id", "")),
 		"card_ids": selected
 	})
+
+
+func _choose_skill_discard_command(state: RefCounted, actor_id: int, payload: Dictionary) -> Dictionary:
+	var hand: Array = (state.call("player", actor_id) as Dictionary).get("hand", []) as Array
+	var catalog: RefCounted = state.get("catalog") as RefCounted
+	var required_sum := int(payload.get("required_rank_sum", 0))
+	var minimum_count := int(payload.get("minimum_count", 1))
+	var selected: Array[String] = []
+	var found := _find_rank_sum(hand, catalog, required_sum, minimum_count, 0, 0, [], selected)
+	if not found:
+		selected.clear()
+	return MatchCommandScript.make(MatchCommandScript.SKILL_DISCARD, actor_id, {"request_id": String(payload.get("request_id", "")), "card_ids": selected})
+
+
+func _find_rank_sum(hand: Array, catalog: RefCounted, required_sum: int, minimum_count: int, index: int, current_sum: int, current: Array[String], result: Array[String]) -> bool:
+	if current_sum == required_sum and current.size() >= minimum_count:
+		result.append_array(current)
+		return true
+	if current_sum >= required_sum or index >= hand.size():
+		return false
+	for next_index: int in range(index, hand.size()):
+		var card_id := String(hand[next_index])
+		var rank := int(catalog.call("staged_instance_rank", card_id))
+		if rank <= 0:
+			continue
+		current.append(card_id)
+		if _find_rank_sum(hand, catalog, required_sum, minimum_count, next_index + 1, current_sum + rank, current, result):
+			return true
+		current.pop_back()
+	return false
 
 
 func _score_event_choice(state: RefCounted, payload: Dictionary) -> float:

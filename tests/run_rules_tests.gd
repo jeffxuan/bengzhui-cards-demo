@@ -20,6 +20,7 @@ func _init() -> void:
 	_test_extra_action_and_round_pressure()
 	_test_targeting_and_public_history()
 	_test_purchased_cards_persist()
+	_test_thunderstorm_skill_discard()
 	if failures.is_empty():
 		print("RULE_TESTS_OK: v4 resources, discard continuations, responses, pressure, targeting, and public history passed.")
 		quit(0)
@@ -234,6 +235,31 @@ func _test_purchased_cards_persist() -> void:
 		var end_turn := MatchCommandScript.make(MatchCommandScript.END_TURN, 0)
 		_expect(bool(state.call("submit_command", end_turn)), "Player should be able to end turn with a purchased card reserved.")
 		_expect(((state.call("player", 0) as Dictionary).get("purchased_hand", []) as Array).size() == 1, "Purchased card must persist across turns until played.")
+
+
+func _test_thunderstorm_skill_discard() -> void:
+	var state: RefCounted = _state(["q", "ginger", "maddy", "signal"], 109)
+	var q: Dictionary = state.call("player", 0) as Dictionary
+	var enemy: Dictionary = state.call("player", 1) as Dictionary
+	q["hand"] = ["rally_new#003", "crossfire_new#003"]
+	q["position"] = Vector2i(2, 2)
+	enemy["position"] = Vector2i(3, 2)
+	state.players[0] = q
+	state.players[1] = enemy
+	var thunderstorm := _find_command(state, MatchCommandScript.USE_SKILL, "q_thunderstorm")
+	_expect(not thunderstorm.is_empty(), "Q must expose Thunderstorm as a legal staged skill.")
+	if thunderstorm.is_empty():
+		return
+	_expect(bool(state.call("submit_command", thunderstorm)), "Thunderstorm should open a discard request.")
+	var request: Dictionary = state.get("pending_skill_discard") as Dictionary
+	_expect(int(request.get("required_rank_sum", 0)) == 23, "Thunderstorm discard request must require rank sum 23.")
+	var invalid := MatchCommandScript.make(MatchCommandScript.SKILL_DISCARD, 0, {"request_id": request.get("request_id", ""), "card_ids": ["rally_new#003"]})
+	_expect(not bool(state.call("submit_command", invalid)), "Thunderstorm must reject an incorrect rank sum.")
+	var valid := MatchCommandScript.make(MatchCommandScript.SKILL_DISCARD, 0, {"request_id": request.get("request_id", ""), "card_ids": ["rally_new#003", "crossfire_new#003"]})
+	_expect(bool(state.call("submit_command", valid)), "Thunderstorm should resolve after a valid rank-sum discard: %s" % String(state.get("last_error")))
+	_expect((state.get("pending_skill_discard") as Dictionary).is_empty(), "Skill discard request must clear after payment.")
+	var enemy_after: Dictionary = state.call("player", 1) as Dictionary
+	_expect(int(enemy_after.get("health", 0)) < 7 and int((enemy_after.get("statuses", {}) as Dictionary).get("paralyze", 0)) > 0, "Thunderstorm must damage and paralyze enemies in its area.")
 
 
 func _state(roster: Array[String], seed: int) -> RefCounted:

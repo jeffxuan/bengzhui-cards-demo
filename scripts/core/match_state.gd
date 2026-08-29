@@ -26,6 +26,7 @@ var collapse_count: int = 0
 var pending_action: Dictionary = {}
 var pending_event: Dictionary = {}
 var pending_discard: Dictionary = {}
+var pending_skill_discard: Dictionary = {}
 var profession_choice_pending: bool = false
 var discard_continuation: Dictionary = {}
 var last_event: Dictionary = {}
@@ -130,7 +131,7 @@ func submit_command(command: Dictionary) -> bool:
 		return false
 	command_log.append(command.duplicate(true))
 	var command_type: String = String(command.get("type", ""))
-	if command_type != MatchCommandScript.SWITCH_PROFESSION and command_type != MatchCommandScript.RESPOND and command_type != MatchCommandScript.DISCARD_CARDS:
+	if command_type != MatchCommandScript.SWITCH_PROFESSION and command_type != MatchCommandScript.RESPOND and command_type != MatchCommandScript.DISCARD_CARDS and command_type != MatchCommandScript.SKILL_DISCARD:
 		players[active_player_index]["turn_commands"] = int(players[active_player_index].get("turn_commands", 0)) + 1
 	var payload: Dictionary = command.get("payload", {}) as Dictionary
 	var tiebreak_snapshot: Array[Dictionary] = _capture_tiebreak_snapshot(_alive_player_ids())
@@ -151,6 +152,8 @@ func submit_command(command: Dictionary) -> bool:
 			_handle_end_turn()
 		MatchCommandScript.DISCARD_CARDS:
 			_handle_discard_cards(payload)
+		MatchCommandScript.SKILL_DISCARD:
+			_handle_skill_discard(payload)
 		MatchCommandScript.SWITCH_PROFESSION:
 			_handle_switch_profession(payload)
 	_settle_eliminations(tiebreak_snapshot)
@@ -164,6 +167,11 @@ func submit_command(command: Dictionary) -> bool:
 func legal_commands(actor_id: int = -1) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	if finished or players.is_empty():
+		return result
+	if not pending_skill_discard.is_empty():
+		var skill_discard_actor: int = int(pending_skill_discard.get("player_id", -1))
+		if actor_id < 0 or actor_id == skill_discard_actor:
+			result.append(MatchCommandScript.make(MatchCommandScript.SKILL_DISCARD, skill_discard_actor, {"request_id": String(pending_skill_discard.get("request_id", "")), "required_rank_sum": int(pending_skill_discard.get("required_rank_sum", 0)), "minimum_count": int(pending_skill_discard.get("minimum_count", 1))}))
 		return result
 	if not pending_discard.is_empty():
 		var discard_actor: int = int(pending_discard.get("player_id", -1))
@@ -305,6 +313,31 @@ func _handle_discard_cards(payload: Dictionary) -> void:
 	)
 
 
+func _handle_skill_discard(payload: Dictionary) -> void:
+	var player_id: int = int(pending_skill_discard.get("player_id", -1))
+	var selected: Array = payload.get("card_ids", []) as Array
+	var hand: Array = players[player_id].get("hand", []) as Array
+	var discard: Array = players[player_id].get("discard", []) as Array
+	var discarded: Array[String] = []
+	for card_value: Variant in selected:
+		var card_id := String(card_value)
+		var index := hand.find(card_id)
+		if index >= 0:
+			hand.remove_at(index)
+			discard.append(card_id)
+			discarded.append(card_id)
+			_record_discard_origin(player_id, card_id)
+	players[player_id]["hand"] = hand
+	players[player_id]["discard"] = discard
+	var skill_id := String(pending_skill_discard.get("skill_id", ""))
+	pending_skill_discard.clear()
+	_emit("cards_discarded", {"player_id": player_id, "card_ids": discarded, "reason_id": "skill:%s" % skill_id, "message": "%s 为技能【%s】弃置了%d张牌。" % [String(players[player_id].get("name", "")), skill_id, discarded.size()]})
+	_emit("skill_discard_paid", {"player_id": player_id, "skill_id": skill_id, "card_ids": discarded})
+	var skill: Dictionary = _skill_definition(player_id, skill_id)
+	var action: Dictionary = {"source_id": player_id, "target_id": -1, "definition": skill.duplicate(true), "category": "skill", "card_id": "", "damage_bonus": 0, "unanswerable": true}
+	_resolve_action(action)
+
+
 func replay_document() -> Dictionary:
 	var roster: Array[String] = []
 	for player_state: Dictionary in players:
@@ -355,6 +388,7 @@ func deterministic_snapshot() -> Dictionary:
 		"winner": winner_id,
 		"win_reason_id": win_reason_id,
 		"pending_discard": pending_discard.duplicate(true),
+		"pending_skill_discard": pending_skill_discard.duplicate(true),
 		"profession_choice_pending": profession_choice_pending,
 		"played_history": _public_play_history_snapshot()
 	}
@@ -386,6 +420,13 @@ func _validate_command(command: Dictionary) -> String:
 		return "命令包含无效玩家。"
 	if not bool(players[actor_id].get("alive", false)):
 		return "被击败的玩家不能行动。"
+	if not pending_skill_discard.is_empty():
+		if String(command.get("type", "")) != MatchCommandScript.SKILL_DISCARD or actor_id != int(pending_skill_discard.get("player_id", -1)):
+			return "请先完成技能弃牌选择。"
+		var skill_payload: Dictionary = command.get("payload", {}) as Dictionary
+		if String(skill_payload.get("request_id", "")) != String(pending_skill_discard.get("request_id", "")):
+			return "技能弃牌请求已经失效。"
+		return catalog.call("validate_rank_sum_selection", players[actor_id].get("hand", []) as Array, skill_payload.get("card_ids", []) as Array, int(pending_skill_discard.get("required_rank_sum", 0)), int(pending_skill_discard.get("minimum_count", 1)))
 	if not pending_discard.is_empty():
 		if String(command.get("type", "")) != MatchCommandScript.DISCARD_CARDS or actor_id != int(pending_discard.get("player_id", -1)):
 			return "请先完成弃牌选择。"
@@ -629,6 +670,15 @@ func _legal_skill_commands(actor_id: int) -> Array[Dictionary]:
 		if uses_per_turn > 0 and skill_uses >= uses_per_turn:
 			continue
 		result.append_array(_target_commands(MatchCommandScript.USE_SKILL, actor_id, skill_id, skill))
+	var staged_hand_available := false
+	for staged_card_value: Variant in players[actor_id].get("hand", []) as Array:
+		if String(staged_card_value).find("#") >= 0:
+			staged_hand_available = true
+			break
+	if String(players[actor_id].get("character_id", "")) == "q" and staged_hand_available:
+		var staged_thunderstorm: Dictionary = _skill_definition(actor_id, "q_thunderstorm")
+		if not staged_thunderstorm.is_empty():
+			result.append_array(_target_commands(MatchCommandScript.USE_SKILL, actor_id, "q_thunderstorm", staged_thunderstorm))
 	return result
 
 
@@ -746,6 +796,17 @@ func _handle_use_skill(payload: Dictionary) -> void:
 	var skill_id: String = String(payload.get("skill_id", ""))
 	var target_id: int = int(payload.get("target_id", actor_id))
 	var skill: Dictionary = _skill_definition(actor_id, skill_id)
+	var discard_requirement: Dictionary = skill.get("discard_requirement", {}) as Dictionary
+	if not discard_requirement.is_empty():
+		pending_skill_discard = {
+			"request_id": "%d:%d:%s" % [command_log.size(), actor_id, skill_id],
+			"player_id": actor_id,
+			"skill_id": skill_id,
+			"required_rank_sum": int(discard_requirement.get("rank_sum", 0)),
+			"minimum_count": int(discard_requirement.get("minimum_cards", 1))
+		}
+		_emit("discard_requested", {"player_id": actor_id, "request_id": pending_skill_discard["request_id"], "required_rank_sum": pending_skill_discard["required_rank_sum"], "minimum_count": pending_skill_discard["minimum_count"], "reason_id": "skill:%s" % skill_id, "message": "%s 请选择点数和为%d的牌发动【%s】。" % [String(players[actor_id].get("name", "")), pending_skill_discard["required_rank_sum"], String(skill.get("name", skill_id))]})
+		return
 	var skill_uses: Dictionary = players[actor_id].get("skill_uses", {}) as Dictionary
 	skill_uses[skill_id] = int(skill_uses.get(skill_id, 0)) + 1
 	players[actor_id]["skill_uses"] = skill_uses
@@ -1766,6 +1827,8 @@ func _skill_definition(player_id: int, skill_id: String) -> Dictionary:
 			var skill: Dictionary = (skill_value as Dictionary).duplicate(true)
 			skill["category"] = "skill"
 			return skill
+	if skill_id == "q_thunderstorm" and String(players[player_id].get("character_id", "")) == "q":
+		return catalog.call("executable_staged_skill", "q", skill_id) as Dictionary
 	return {}
 
 

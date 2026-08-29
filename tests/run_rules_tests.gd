@@ -189,6 +189,20 @@ func _test_targeting_and_public_history() -> void:
 	_expect(bool(state.call("submit_command", command)), "Previewed attack should resolve.")
 	var history: Array = (state.call("player", 0) as Dictionary).get("public_card_history", []) as Array
 	_expect(history.size() == 1 and String((history[0] as Dictionary).get("card_id", "")) == "slash", "Played cards must be publicly recorded.")
+	var ginger_state: RefCounted = _state(["ginger", "q", "maddy", "signal"], 108)
+	var ginger_target: Dictionary = ginger_state.call("player", 1) as Dictionary
+	ginger_target["position"] = Vector2i(3, 2)
+	ginger_target["health"] = 4
+	ginger_target["max_health"] = 8
+	ginger_state.players[1] = ginger_target
+	var ginger_active: Dictionary = ginger_state.call("player", 0) as Dictionary
+	ginger_active["hand"] = ["slash"]
+	ginger_state.players[0] = ginger_active
+	var ginger_attack: Dictionary = _find_command(ginger_state, MatchCommandScript.PLAY_CARD, "slash")
+	_expect(not ginger_attack.is_empty(), "Ginger should have a legal attack for passive boundary test.")
+	if not ginger_attack.is_empty():
+		_expect(bool(ginger_state.call("submit_command", ginger_attack)), "Ginger boundary attack should resolve.")
+		_expect((ginger_state.get("pending_action") as Dictionary).is_empty(), "Ginger attacks at half health must be unanswerable.")
 
 
 func _test_purchased_cards_persist() -> void:

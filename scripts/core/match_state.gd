@@ -713,6 +713,14 @@ func _handle_play_card(payload: Dictionary) -> void:
 	var damage_bonus: int = 0
 	var unanswerable: bool = false
 	var statuses: Dictionary = active.get("statuses", {}) as Dictionary
+	if String(active.get("character_id", "")) == "ginger" and String(definition.get("category", "")) == "attack" and target_id >= 0 and target_id < players.size():
+		var target_state: Dictionary = players[target_id]
+		var target_health := int(target_state.get("health", 0))
+		var target_max_health := maxi(1, int(target_state.get("max_health", 1)))
+		if target_health * 2 <= target_max_health:
+			damage_bonus += 1
+		if target_health * 2 >= target_max_health:
+			unanswerable = true
 	if String(definition.get("category", "")) == "attack" and int(statuses.get("hidden", 0)) > 0:
 		damage_bonus += 1
 		unanswerable = true
@@ -1225,7 +1233,7 @@ func _deal_damage(target_id: int, amount: int, kind: String, source_id: int, is_
 	var target: Dictionary = players[target_id]
 	var source: Dictionary = players[source_id] if source_id >= 0 and source_id < players.size() else {}
 	var final_amount: int = amount
-	if is_attack and not source.is_empty() and String(source.get("character_id", "")) == "ginger" and int(target.get("health", 0)) * 2 > int(target.get("max_health", 1)):
+	if is_attack and not source.is_empty() and String(source.get("character_id", "")) == "ginger" and int(target.get("health", 0)) * 2 <= int(target.get("max_health", 1)):
 		final_amount += 1
 	if kind == "lightning" and not source.is_empty() and String(source.get("character_id", "")) == "q":
 		var source_flags: Dictionary = source.get("flags", {}) as Dictionary

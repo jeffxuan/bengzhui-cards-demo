@@ -330,11 +330,12 @@ func _handle_skill_discard(payload: Dictionary) -> void:
 	players[player_id]["hand"] = hand
 	players[player_id]["discard"] = discard
 	var skill_id := String(pending_skill_discard.get("skill_id", ""))
+	var target_id := int(pending_skill_discard.get("target_id", player_id))
 	pending_skill_discard.clear()
 	_emit("cards_discarded", {"player_id": player_id, "card_ids": discarded, "reason_id": "skill:%s" % skill_id, "message": "%s 为技能【%s】弃置了%d张牌。" % [String(players[player_id].get("name", "")), skill_id, discarded.size()]})
 	_emit("skill_discard_paid", {"player_id": player_id, "skill_id": skill_id, "card_ids": discarded})
 	var skill: Dictionary = _skill_definition(player_id, skill_id)
-	var action: Dictionary = {"source_id": player_id, "target_id": -1, "definition": skill.duplicate(true), "category": "skill", "card_id": "", "damage_bonus": 0, "unanswerable": true}
+	var action: Dictionary = {"source_id": player_id, "target_id": target_id, "definition": skill.duplicate(true), "category": "skill", "card_id": "", "damage_bonus": 0, "unanswerable": true}
 	_resolve_action(action)
 
 
@@ -796,20 +797,22 @@ func _handle_use_skill(payload: Dictionary) -> void:
 	var skill_id: String = String(payload.get("skill_id", ""))
 	var target_id: int = int(payload.get("target_id", actor_id))
 	var skill: Dictionary = _skill_definition(actor_id, skill_id)
+	var skill_uses: Dictionary = players[actor_id].get("skill_uses", {}) as Dictionary
+	skill_uses[skill_id] = int(skill_uses.get(skill_id, 0)) + 1
+	players[actor_id]["skill_uses"] = skill_uses
 	var discard_requirement: Dictionary = skill.get("discard_requirement", {}) as Dictionary
 	if not discard_requirement.is_empty():
 		pending_skill_discard = {
 			"request_id": "%d:%d:%s" % [command_log.size(), actor_id, skill_id],
 			"player_id": actor_id,
 			"skill_id": skill_id,
+			"target_id": target_id,
 			"required_rank_sum": int(discard_requirement.get("rank_sum", 0)),
 			"minimum_count": int(discard_requirement.get("minimum_cards", 1))
 		}
+		_emit("skill_used", {"player_id": actor_id, "target_id": target_id, "skill_id": skill_id, "pending_cost": true, "message": "%s 准备发动【%s】，等待弃牌。" % [String(players[actor_id].get("name", "")), String(skill.get("name", skill_id))]})
 		_emit("discard_requested", {"player_id": actor_id, "request_id": pending_skill_discard["request_id"], "required_rank_sum": pending_skill_discard["required_rank_sum"], "minimum_count": pending_skill_discard["minimum_count"], "reason_id": "skill:%s" % skill_id, "message": "%s 请选择点数和为%d的牌发动【%s】。" % [String(players[actor_id].get("name", "")), pending_skill_discard["required_rank_sum"], String(skill.get("name", skill_id))]})
 		return
-	var skill_uses: Dictionary = players[actor_id].get("skill_uses", {}) as Dictionary
-	skill_uses[skill_id] = int(skill_uses.get(skill_id, 0)) + 1
-	players[actor_id]["skill_uses"] = skill_uses
 	var active: Dictionary = players[actor_id]
 	active = players[actor_id]
 	players[actor_id] = active

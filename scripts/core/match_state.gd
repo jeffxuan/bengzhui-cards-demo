@@ -655,7 +655,7 @@ func _legal_card_commands(actor_id: int) -> Array[Dictionary]:
 		if seen.has(card_id):
 			continue
 		seen[card_id] = true
-		var definition: Dictionary = catalog.call("card", card_id) as Dictionary
+		var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
 		var category: String = String(definition.get("category", ""))
 		if category == "response" or not _can_pay(actor_id, definition):
 			continue
@@ -733,7 +733,7 @@ func _legal_buy_commands(actor_id: int) -> Array[Dictionary]:
 	if bool(active.get("market_bought", false)):
 		return result
 	for market_index: int in market.size():
-		var definition: Dictionary = catalog.call("card", market[market_index]) as Dictionary
+		var definition: Dictionary = catalog.call("resolve_card", market[market_index]) as Dictionary
 		if int(active.get("coins", 0)) >= int(definition.get("price", 0)):
 			result.append(MatchCommandScript.make(MatchCommandScript.BUY, actor_id, {"market_index": market_index}))
 	return result
@@ -764,7 +764,7 @@ func _handle_play_card(payload: Dictionary) -> void:
 	var actor_id: int = active_player_index
 	var card_id: String = String(payload.get("card_id", ""))
 	var target_id: int = int(payload.get("target_id", actor_id))
-	var definition: Dictionary = catalog.call("card", card_id) as Dictionary
+	var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
 	var active: Dictionary = players[actor_id]
 	if not _remove_first(active.get("hand", []) as Array, card_id):
 		_remove_first(active.get("purchased_hand", []) as Array, card_id)
@@ -871,7 +871,7 @@ func _handle_response(payload: Dictionary) -> void:
 		_emit("response_passed", {"player_id": responder_id, "message": "%s 放弃响应。" % String(players[responder_id].get("name", ""))})
 		_resolve_action(action)
 		return
-	var definition: Dictionary = catalog.call("card", card_id) as Dictionary
+	var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
 	var responder: Dictionary = players[responder_id]
 	if not _remove_first(responder.get("hand", []) as Array, card_id):
 		_remove_first(responder.get("purchased_hand", []) as Array, card_id)
@@ -911,7 +911,7 @@ func _handle_buy(payload: Dictionary) -> void:
 	var market_index: int = int(payload.get("market_index", -1))
 	var actor_id: int = active_player_index
 	var card_id: String = market[market_index]
-	var definition: Dictionary = catalog.call("card", card_id) as Dictionary
+	var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
 	var active: Dictionary = players[actor_id]
 	active["coins"] = int(active.get("coins", 0)) - int(definition.get("price", 0))
 	active["actions"] = int(active.get("actions", 0)) - 1
@@ -1192,7 +1192,7 @@ func _valid_response_cards(player_id: int, action_category: String) -> Array[Str
 		if seen.has(card_id):
 			continue
 		seen[card_id] = true
-		var definition: Dictionary = catalog.call("card", card_id) as Dictionary
+		var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
 		if String(definition.get("category", "")) != "response" or not ["heavenly_sense", "shrug_off"].has(card_id) or not _can_pay(player_id, definition):
 			continue
 		var tags: Array[String] = _string_array(definition.get("tags", []))
@@ -1627,7 +1627,7 @@ func _build_profession_deck(profession: String) -> Array[String]:
 
 
 func _record_discard_origin(player_id: int, card_id: String) -> void:
-	var definition: Dictionary = catalog.call("card", card_id) as Dictionary
+	var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
 	var profession: String = String(definition.get("profession", "neutral"))
 	var target: Dictionary = players[player_id]
 	var discard_key: String = "profession_discard" if profession != "neutral" and String(definition.get("category", "")) != "equipment" else "common_discard"
@@ -1636,7 +1636,7 @@ func _record_discard_origin(player_id: int, card_id: String) -> void:
 
 
 func _equip(player_id: int, card_id: String) -> void:
-	var definition: Dictionary = catalog.call("card", card_id) as Dictionary
+	var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
 	var slot: String = String(definition.get("slot", ""))
 	if slot.is_empty():
 		return

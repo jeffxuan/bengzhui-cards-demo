@@ -995,7 +995,11 @@ func _range_text(definition: Dictionary) -> String:
 	var target: String = String(definition.get("target", "self"))
 	if target == "self":
 		return "自身"
-	return "距离%d" % int(definition.get("range", 0))
+	var range_value := int(definition.get("range", 0))
+	if target == "all_enemies_in_range":
+		var side := range_value * 2 + 1
+		return "%dx%d范围" % [side, side]
+	return "距离%d" % range_value
 
 
 func _open_settings() -> void:

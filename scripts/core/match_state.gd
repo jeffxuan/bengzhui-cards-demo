@@ -359,8 +359,11 @@ func deterministic_snapshot() -> Dictionary:
 		player_states.append({
 			"id": int(player_state["id"]),
 			"health": int(player_state["health"]),
+			"stamina": int(player_state.get("stamina", 0)),
+			"mana": int(player_state.get("mana", 0)),
 			"armor": int(player_state["armor"]),
 			"coins": int(player_state["coins"]),
+			"actions": int(player_state.get("actions", 0)),
 			"profession": String(player_state.get("profession", "")),
 			"professions": (player_state.get("professions", []) as Array).duplicate(),
 			"position": _position_payload(player_state["position"] as Vector2i),

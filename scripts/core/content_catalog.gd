@@ -55,6 +55,16 @@ func card(card_id: String) -> Dictionary:
 	return {}
 
 
+func resolve_card(value: String) -> Dictionary:
+	var definition: Dictionary = card(value)
+	if not definition.is_empty():
+		return definition
+	var separator := value.rfind("#")
+	if separator >= 0:
+		return staged_card_instance(value.substr(0, separator), int(value.substr(separator + 1)) - 1)
+	return {}
+
+
 func card_instance(instance_id: String) -> Dictionary:
 	return cards_by_instance_id.get(instance_id, {}) as Dictionary
 

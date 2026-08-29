@@ -36,6 +36,8 @@ func _test_content_contract() -> void:
 	_expect(instances.size() == (catalog.get("cards") as Array).size(), "Legacy logical cards must each receive one instance.")
 	var slash_instance: Dictionary = catalog.call("card_instance", "slash#001") as Dictionary
 	_expect(String(slash_instance.get("card_id", "")) == "slash", "Card instances must retain their logical card ID.")
+	var staged_resolved: Dictionary = catalog.call("resolve_card", "slash_new#001") as Dictionary
+	_expect(String(staged_resolved.get("instance_id", "")) == "slash_new#001", "Catalog resolve_card must support staged instance IDs.")
 	var resolved_instance: Dictionary = catalog.call("card", "slash#001") as Dictionary
 	_expect(String(resolved_instance.get("id", "")) == "slash", "Card lookup must resolve instance IDs.")
 	_expect(String(catalog.call("logical_card_id", "slash#001")) == "slash", "Logical card ID lookup must resolve instances.")

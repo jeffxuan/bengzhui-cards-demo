@@ -917,14 +917,9 @@ func _selected_staged_rank_sum() -> int:
 
 
 func _card_definition_for_ui(card_id: String) -> Dictionary:
-	var definition: Dictionary = catalog.call("card", card_id) as Dictionary
+	var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
 	if not definition.is_empty():
 		return definition
-	var separator := card_id.rfind("#")
-	if separator >= 0:
-		var staged := catalog.call("staged_card_instance", card_id.substr(0, separator), int(card_id.substr(separator + 1)) - 1) as Dictionary
-		if not staged.is_empty():
-			return staged
 	return {"id": card_id, "name": card_id}
 
 

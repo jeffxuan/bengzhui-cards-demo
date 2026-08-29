@@ -393,6 +393,8 @@ func deterministic_snapshot() -> Dictionary:
 		"win_reason_id": win_reason_id,
 		"pending_discard": pending_discard.duplicate(true),
 		"pending_skill_discard": pending_skill_discard.duplicate(true),
+		"pending_action": pending_action.duplicate(true),
+		"pending_event": pending_event.duplicate(true),
 		"profession_choice_pending": profession_choice_pending,
 		"played_history": _public_play_history_snapshot()
 	}

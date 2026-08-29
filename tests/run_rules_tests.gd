@@ -102,6 +102,7 @@ func _test_turn_resources_and_free_character_skills() -> void:
 	var resource_snapshot: Dictionary = state.call("deterministic_snapshot") as Dictionary
 	var snapshot_player: Dictionary = (resource_snapshot.get("players", []) as Array)[0] as Dictionary
 	_expect(snapshot_player.has("stamina") and snapshot_player.has("mana") and snapshot_player.has("actions"), "Deterministic snapshots must include player resources and actions.")
+	_expect(resource_snapshot.has("pending_action") and resource_snapshot.has("pending_event"), "Deterministic snapshots must include pending action and event state.")
 	_expect(int((state.call("player", 1) as Dictionary).get("stamina", -1)) == 0 and int((state.call("player", 1) as Dictionary).get("mana", -1)) == 0, "Off-turn resources must be zero.")
 	var target: Dictionary = state.call("player", 1) as Dictionary
 	target["position"] = Vector2i(3, 2)

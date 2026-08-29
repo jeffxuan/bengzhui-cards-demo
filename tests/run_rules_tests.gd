@@ -193,6 +193,8 @@ func _test_targeting_and_public_history() -> void:
 	state.players[1] = target
 	var preview: Dictionary = state.call("targeting_preview", 0, MatchCommandScript.PLAY_CARD, "slash") as Dictionary
 	_expect(int(preview.get("range", 0)) == 1, "Slash preview must report distance one.")
+	var staged_preview: Dictionary = state.call("targeting_preview", 0, MatchCommandScript.PLAY_CARD, "slash_new#001") as Dictionary
+	_expect(int(staged_preview.get("range", 0)) == 0 or not staged_preview.get("cells", []).is_empty(), "Targeting preview must resolve staged card instances.")
 	target["position"] = Vector2i(3, 3)
 	state.players[1] = target
 	var diagonal_preview: Dictionary = state.call("targeting_preview", 0, MatchCommandScript.PLAY_CARD, "slash") as Dictionary

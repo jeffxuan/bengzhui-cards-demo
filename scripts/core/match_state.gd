@@ -90,6 +90,10 @@ func targeting_preview(actor_id: int, command_type: String, definition_id: Strin
 	var definition: Dictionary
 	if command_type == MatchCommandScript.PLAY_CARD:
 		definition = catalog.call("card", definition_id) as Dictionary
+		if definition.is_empty():
+			var separator := definition_id.rfind("#")
+			if separator >= 0:
+				definition = catalog.call("staged_card_instance", definition_id.substr(0, separator), int(definition_id.substr(separator + 1)) - 1) as Dictionary
 	else:
 		definition = _skill_definition(actor_id, definition_id)
 	var source: Vector2i = players[actor_id].get("position", Vector2i.ZERO) as Vector2i

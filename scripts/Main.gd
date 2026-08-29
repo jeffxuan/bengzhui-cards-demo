@@ -524,7 +524,7 @@ func _refresh_hand() -> void:
 	for card_index: int in display_hand.size():
 		var card_value: Variant = display_hand[card_index]
 		var card_id: String = String(card_value)
-		var definition: Dictionary = catalog.call("card", card_id) as Dictionary
+		var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
 		var button: Button = Button.new()
 		button.custom_minimum_size = Vector2(260, 94)
 		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -594,7 +594,7 @@ func _refresh_market() -> void:
 	var market_cards: Array[String] = state.get("market") as Array[String]
 	for market_index: int in market_cards.size():
 		var card_id: String = market_cards[market_index]
-		var definition: Dictionary = catalog.call("card", card_id) as Dictionary
+		var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
 		var button: Button = Button.new()
 		button.custom_minimum_size.y = 48
 		button.text = "%s  ·  %d金币" % [String(definition.get("name", card_id)), int(definition.get("price", 0))]
@@ -841,7 +841,7 @@ func _refresh_blocking_modal() -> void:
 		var hand: Array = human.get("hand", []) as Array
 		for index: int in hand.size():
 			var card_id: String = String(hand[index])
-			var definition: Dictionary = catalog.call("card", card_id) as Dictionary
+			var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
 			var card_button: CheckButton = CheckButton.new()
 			card_button.text = "%s · %s" % [String(definition.get("name", card_id)), _range_text(definition)]
 			card_button.tooltip_text = String(definition.get("description", ""))
@@ -890,7 +890,7 @@ func _refresh_blocking_modal() -> void:
 		for command: Dictionary in state.call("legal_commands", 0) as Array[Dictionary]:
 			var card_id: String = String((command.get("payload", {}) as Dictionary).get("card_id", ""))
 			var button: Button = Button.new()
-			button.text = "不响应" if card_id.is_empty() else "使用【%s】" % String((catalog.call("card", card_id) as Dictionary).get("name", card_id))
+			button.text = "不响应" if card_id.is_empty() else "使用【%s】" % String((catalog.call("resolve_card", card_id) as Dictionary).get("name", card_id))
 			button.pressed.connect(_submit_human_command.bind(command))
 			modal_actions.add_child(button)
 		return
@@ -961,7 +961,7 @@ func _show_player_history(player_id: int) -> void:
 	modal_description.text = "只显示最近5张已经公开打出的牌。"
 	for entry_value: Variant in player_state.get("public_card_history", []) as Array:
 		var entry: Dictionary = entry_value as Dictionary
-		var definition: Dictionary = catalog.call("card", String(entry.get("card_id", ""))) as Dictionary
+		var definition: Dictionary = catalog.call("resolve_card", String(entry.get("card_id", ""))) as Dictionary
 		var line: Label = _label("第%d轮 · %s · %s\n%s" % [int(entry.get("round", 0)), String(definition.get("name", entry.get("card_id", ""))), _range_text(definition), String(definition.get("description", ""))], 14, COLORS["ink"] as Color)
 		line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		modal_actions.add_child(line)

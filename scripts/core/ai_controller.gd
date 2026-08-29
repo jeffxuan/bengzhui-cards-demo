@@ -58,7 +58,7 @@ func _choose_discard_command(state: RefCounted, actor_id: int, payload: Dictiona
 	var catalog: RefCounted = state.get("catalog") as RefCounted
 	for index: int in hand.size():
 		var card_id: String = String(hand[index])
-		var definition: Dictionary = catalog.call("card", card_id) as Dictionary
+		var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
 		var score: float = float(definition.get("price", 0))
 		if String(definition.get("category", "")) == "equipment":
 			score += 4.0
@@ -179,7 +179,7 @@ func _score_definition(state: RefCounted, actor_id: int, payload: Dictionary, is
 	var definition: Dictionary
 	if is_card:
 		var catalog: RefCounted = state.get("catalog") as RefCounted
-		definition = catalog.call("card", String(payload.get("card_id", ""))) as Dictionary
+		definition = catalog.call("resolve_card", String(payload.get("card_id", ""))) as Dictionary
 	else:
 		definition = state.call("_skill_definition", actor_id, String(payload.get("skill_id", ""))) as Dictionary
 	var actor: Dictionary = state.call("player", actor_id) as Dictionary

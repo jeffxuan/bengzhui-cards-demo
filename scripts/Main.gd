@@ -545,7 +545,14 @@ func _card_identity_text(definition: Dictionary) -> String:
 	var rank := int(definition.get("rank", 0))
 	if suit == "none" and rank <= 0:
 		return ""
-	return "%s %s" % [String(suit_names.get(suit, suit)), str(rank) if rank > 0 else ""]
+	return "%s %s" % [String(suit_names.get(suit, suit)), _rank_label(rank)]
+
+
+func _rank_label(rank: int) -> String:
+	if rank <= 0:
+		return ""
+	var labels := {1: "A", 11: "J", 12: "Q", 13: "K"}
+	return String(labels.get(rank, str(rank)))
 
 
 func _refresh_skills() -> void:
@@ -832,7 +839,7 @@ func _refresh_blocking_modal() -> void:
 			var skill_card_id := String(skill_hand[index])
 			var skill_card_definition := _card_definition_for_ui(skill_card_id)
 			var skill_card_button := CheckButton.new()
-			skill_card_button.text = "%s · 点数 %d" % [String(skill_card_definition.get("name", skill_card_id)), int(catalog.call("staged_instance_rank", skill_card_id))]
+			skill_card_button.text = "%s · %s" % [String(skill_card_definition.get("name", skill_card_id)), _card_identity_text(skill_card_definition)]
 			skill_card_button.tooltip_text = String(skill_card_definition.get("source_text", skill_card_definition.get("description", "")))
 			skill_card_button.button_pressed = discard_selected_indices.has(index)
 			skill_card_button.pressed.connect(_toggle_discard_selection.bind(index))

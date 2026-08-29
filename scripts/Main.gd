@@ -1076,14 +1076,22 @@ func _debug_info_text() -> String:
 	for player_value: Variant in state.get("players") as Array:
 		var player_state := player_value as Dictionary
 		roster.append("%s(%s)" % [String(player_state.get("name", "")), String(player_state.get("character_id", ""))])
-	return "版本 %s\n规则 v%d · 内容 v%d\n种子 %d\n阵容 %s\n胜因 %s\n命令数 %d" % [
+	var snapshot: Dictionary = state.call("deterministic_snapshot") as Dictionary
+	var bounds: Rect2i = state.call("active_bounds") as Rect2i
+	var pending_label := "技能弃牌" if not (snapshot.get("pending_skill_discard", {}) as Dictionary).is_empty() else ("弃牌" if not (snapshot.get("pending_discard", {}) as Dictionary).is_empty() else "无")
+	return "版本 %s\n规则 v%d · 内容 v%d\n种子 %d\n阵容 %s\n棋盘 %dx%d · 崩坠 %d\n胜因 %s\n命令数 %d\n待处理 %s · provisional %d" % [
 		String(ProjectSettings.get_setting("application/config/version", "未知")),
 		int(rules.get("version", 0)),
 		int(catalog.get("version")),
 		int(state.get("seed")),
 		"、".join(roster),
+		bounds.size.x,
+		bounds.size.y,
+		int(state.get("collapse_count")),
 		String(state.get("win_reason_id")) if bool(state.get("finished")) else "进行中",
-		(state.get("command_log") as Array).size()
+		(state.get("command_log") as Array).size(),
+		pending_label,
+		(catalog.call("provisional_report") as Array).size()
 	]
 
 

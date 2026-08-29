@@ -333,7 +333,7 @@ func _handle_skill_discard(payload: Dictionary) -> void:
 	var target_id := int(pending_skill_discard.get("target_id", player_id))
 	pending_skill_discard.clear()
 	_emit("cards_discarded", {"player_id": player_id, "card_ids": discarded, "reason_id": "skill:%s" % skill_id, "message": "%s 为技能【%s】弃置了%d张牌。" % [String(players[player_id].get("name", "")), skill_id, discarded.size()]})
-	_emit("skill_discard_paid", {"player_id": player_id, "skill_id": skill_id, "card_ids": discarded})
+	_emit("skill_discard_paid", {"player_id": player_id, "skill_id": skill_id, "card_ids": discarded, "message": "%s 已支付技能【%s】的弃牌条件。" % [String(players[player_id].get("name", "")), skill_id]})
 	var skill: Dictionary = _skill_definition(player_id, skill_id)
 	var action: Dictionary = {"source_id": player_id, "target_id": target_id, "definition": skill.duplicate(true), "category": "skill", "card_id": "", "damage_bonus": 0, "unanswerable": true}
 	_resolve_action(action)

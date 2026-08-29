@@ -1091,8 +1091,9 @@ func _debug_info_text() -> String:
 		roster.append("%s(%s)" % [String(player_state.get("name", "")), String(player_state.get("character_id", ""))])
 	var snapshot: Dictionary = state.call("deterministic_snapshot") as Dictionary
 	var bounds: Rect2i = state.call("active_bounds") as Rect2i
+	var readiness: Dictionary = catalog.call("staged_execution_readiness") as Dictionary
 	var pending_label := "技能弃牌" if not (snapshot.get("pending_skill_discard", {}) as Dictionary).is_empty() else ("弃牌" if not (snapshot.get("pending_discard", {}) as Dictionary).is_empty() else "无")
-	return "版本 %s\n规则 v%d · 内容 v%d\n种子 %d\n阵容 %s\n棋盘 %dx%d · 崩坠 %d\n胜因 %s\n命令数 %d\n待处理 %s · provisional %d" % [
+	return "版本 %s\n规则 v%d · 内容 v%d\n种子 %d\n阵容 %s\n棋盘 %dx%d · 崩坠 %d\n胜因 %s\n命令数 %d\n待处理 %s · provisional %d\n暂存牌：可映射 %d/%d" % [
 		String(ProjectSettings.get_setting("application/config/version", "未知")),
 		int(rules.get("version", 0)),
 		int(catalog.get("version")),
@@ -1104,7 +1105,9 @@ func _debug_info_text() -> String:
 		String(state.get("win_reason_id")) if bool(state.get("finished")) else "进行中",
 		(state.get("command_log") as Array).size(),
 		pending_label,
-		(catalog.call("provisional_report") as Array).size()
+		(catalog.call("provisional_report") as Array).size(),
+		(readiness.get("ready_ids", []) as Array).size(),
+		int(readiness.get("total", 0))
 	]
 
 

@@ -105,6 +105,22 @@ func provisional_report() -> Array[Dictionary]:
 	return result
 
 
+func staged_execution_readiness() -> Dictionary:
+	var ready_ids: Array[String] = []
+	var provisional_ids: Array[String] = []
+	for definition: Dictionary in staged_cards:
+		var has_provisional := false
+		for effect_value: Variant in definition.get("effects", []) as Array:
+			if effect_value is Dictionary and String((effect_value as Dictionary).get("op", "")) == "provisional":
+				has_provisional = true
+				break
+		if has_provisional:
+			provisional_ids.append(String(definition.get("id", "")))
+		else:
+			ready_ids.append(String(definition.get("id", "")))
+	return {"total": staged_cards.size(), "ready_ids": ready_ids, "provisional_ids": provisional_ids}
+
+
 func staged_card_instance(card_id: String, copy_index: int) -> Dictionary:
 	for definition: Dictionary in staged_cards:
 		if String(definition.get("id", "")) != card_id:

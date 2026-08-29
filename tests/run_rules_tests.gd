@@ -64,6 +64,8 @@ func _test_content_contract() -> void:
 	_expect(not String(catalog.call("validate_rank_sum_selection", staged_hand, ["slash_new#001", "slash_new#001"], 2, 1)).is_empty(), "Rank-sum selection should reject duplicate instances.")
 	_expect((catalog.get("staged_events") as Array).size() == 27, "新版事件暂存清单应包含文档中的27个事件。")
 	_expect((catalog.get("staged_cards") as Array).size() == 165, "新版通用牌及六个职业牌暂存清单应包含165种牌。")
+	var readiness: Dictionary = catalog.call("staged_execution_readiness") as Dictionary
+	_expect(int(readiness.get("total", 0)) == 165 and (readiness.get("ready_ids", []) as Array).has("slash_new") and (readiness.get("provisional_ids", []) as Array).has("crossfire_new"), "Staged execution readiness must separate mapped and provisional effects.")
 	var staged_instance: Dictionary = catalog.call("staged_card_instance", "slash_new", 0) as Dictionary
 	_expect(String(staged_instance.get("instance_id", "")) == "slash_new#001" and String(staged_instance.get("suit", "")) == "spades", "Staged card instances must resolve suit and ID.")
 	_expect((catalog.call("staged_card_ids_for_profession", "berserker") as Array).size() == 21, "Berserker staged pool must expose 21 definitions.")

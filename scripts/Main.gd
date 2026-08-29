@@ -608,7 +608,7 @@ func _refresh_market() -> void:
 		var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
 		var button: Button = Button.new()
 		button.custom_minimum_size.y = 48
-		button.text = "%s  ·  %d金币" % [String(definition.get("name", card_id)), int(definition.get("price", 0))]
+		button.text = "%s%s  ·  %d金币" % [String(definition.get("name", card_id)), (" · " + _card_identity_text(definition)) if not _card_identity_text(definition).is_empty() else "", int(definition.get("price", 0))]
 		button.tooltip_text = String(definition.get("description", ""))
 		button.disabled = not _has_buy_command(legal, market_index)
 		button.pressed.connect(_buy_market.bind(market_index))

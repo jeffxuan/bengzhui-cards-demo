@@ -116,6 +116,7 @@ func staged_card_instance(card_id: String, copy_index: int) -> Dictionary:
 		var result := definition.duplicate(true)
 		result["card_id"] = card_id
 		result["instance_id"] = "%s#%03d" % [card_id, copy_index + 1]
+		result["description"] = String(definition.get("description", definition.get("source_text", "")))
 		result["suit"] = instance.get("suit", "none")
 		result["rank"] = int(instance.get("rank", 0))
 		result["color"] = _color_for_suit(String(result.get("suit", "none")))

@@ -568,7 +568,7 @@ func _refresh_skills() -> void:
 		var button: Button = Button.new()
 		button.custom_minimum_size.y = 54
 		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		button.text = "%s · 消耗1行动 · 无资源消耗 · %s\n%s" % [String(skill.get("name", skill_id)), _range_text(skill), _short_text(String(skill.get("description", "")), 20)]
+		button.text = "%s · 无行动点限制 · 无资源消耗 · %s\n%s" % [String(skill.get("name", skill_id)), _range_text(skill), _short_text(String(skill.get("description", "")), 20)]
 		button.icon = load("res://assets/third_party/lucide/sparkles.svg") as Texture2D
 		button.tooltip_text = String(skill.get("description", ""))
 		button.disabled = not _has_definition_command(legal, MatchCommandScript.USE_SKILL, skill_id)
@@ -581,7 +581,7 @@ func _refresh_skills() -> void:
 		var staged_button := Button.new()
 		staged_button.custom_minimum_size.y = 54
 		staged_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		staged_button.text = "%s · 弃牌点数和23 · %s\n暂存技能（provisional）" % [String(staged_thunderstorm.get("name", "雷暴")), _range_text(staged_thunderstorm)]
+		staged_button.text = "%s · 无行动点限制 · 弃牌点数和23 · %s\n暂存技能（provisional）" % [String(staged_thunderstorm.get("name", "雷暴")), _range_text(staged_thunderstorm)]
 		staged_button.icon = load("res://assets/third_party/lucide/sparkles.svg") as Texture2D
 		staged_button.tooltip_text = String(staged_thunderstorm.get("source_text", staged_thunderstorm.get("description", "")))
 		staged_button.pressed.connect(_select_skill.bind("q_thunderstorm"))
@@ -1119,7 +1119,7 @@ func _open_tutorial() -> void:
 	settings_open = true
 	modal_layer.visible = true
 	modal_title.text = "回合规则"
-	modal_description.text = "15x15 棋盘只在玩家被击败后缩至 11x11、7x7。\n回合开始恢复体力和法力，回合外资源为0；角色技能不消耗资源，每次使用消耗1个行动，只要还有行动即可重复使用。每回合有1次免费移动。\n手牌上限为当前生命值减2，最低保留1张，超出时自行选择弃牌。\n第5轮起单体伤害提高，第7轮再次提高；范围伤害不受影响。\n只剩一名角色时立即获胜；同时全灭按淘汰数、生命比例、伤害、护甲、手牌依次裁定。\n红框是可达格，金框是攻击范围和可选目标。点击对手可查看最近5张公开出牌。"
+	modal_description.text = "15x15 棋盘只在玩家被击败后缩至 11x11、7x7。\n回合开始恢复体力和法力，回合外资源为0；角色技能不消耗行动点或资源，是否限次只按技能文本执行。每回合有1次免费移动。\n手牌上限为当前生命值减2，最低保留1张，超出时自行选择弃牌。\n第5轮起单体伤害提高，第7轮再次提高；范围伤害不受影响。\n只剩一名角色时立即获胜；同时全灭按淘汰数、生命比例、伤害、护甲、手牌依次裁定。\n红框是可达格，金框是攻击范围和可选目标。点击对手可查看最近5张公开出牌。"
 	_clear_children(modal_actions)
 	var close_button: Button = Button.new()
 	close_button.text = "进入对局" if state != null else "返回角色选择"

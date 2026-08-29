@@ -85,13 +85,16 @@ func _choose_skill_discard_command(state: RefCounted, actor_id: int, payload: Di
 	var required_sum := int(payload.get("required_rank_sum", 0))
 	var minimum_count := int(payload.get("minimum_count", 1))
 	var selected: Array[String] = []
-	var found := _find_rank_sum(hand, catalog, required_sum, minimum_count, 0, 0, [], selected)
+	var found := _find_rank_sum(hand, catalog, required_sum, minimum_count, 0, 0, [], selected, [0])
 	if not found:
 		selected.clear()
 	return MatchCommandScript.make(MatchCommandScript.SKILL_DISCARD, actor_id, {"request_id": String(payload.get("request_id", "")), "card_ids": selected})
 
 
-func _find_rank_sum(hand: Array, catalog: RefCounted, required_sum: int, minimum_count: int, index: int, current_sum: int, current: Array[String], result: Array[String]) -> bool:
+func _find_rank_sum(hand: Array, catalog: RefCounted, required_sum: int, minimum_count: int, index: int, current_sum: int, current: Array[String], result: Array[String], nodes: Array[int]) -> bool:
+	nodes[0] += 1
+	if nodes[0] > 2048:
+		return false
 	if current_sum == required_sum and current.size() >= minimum_count:
 		result.append_array(current)
 		return true
@@ -103,7 +106,7 @@ func _find_rank_sum(hand: Array, catalog: RefCounted, required_sum: int, minimum
 		if rank <= 0:
 			continue
 		current.append(card_id)
-		if _find_rank_sum(hand, catalog, required_sum, minimum_count, next_index + 1, current_sum + rank, current, result):
+		if _find_rank_sum(hand, catalog, required_sum, minimum_count, next_index + 1, current_sum + rank, current, result, nodes):
 			return true
 		current.pop_back()
 	return false

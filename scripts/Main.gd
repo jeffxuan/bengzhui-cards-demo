@@ -757,6 +757,9 @@ func _required_actor_id() -> int:
 	var pending_discard: Dictionary = state.get("pending_discard") as Dictionary
 	if not pending_discard.is_empty():
 		return int(pending_discard.get("player_id", -1))
+	var pending_skill_discard: Dictionary = state.get("pending_skill_discard") as Dictionary
+	if not pending_skill_discard.is_empty():
+		return int(pending_skill_discard.get("player_id", -1))
 	return int((state.call("current_player") as Dictionary).get("id", -1))
 
 
@@ -793,6 +796,30 @@ func _refresh_blocking_modal() -> void:
 		return
 	_clear_children(modal_actions)
 	var pending_discard: Dictionary = state.get("pending_discard") as Dictionary
+	var pending_skill_discard: Dictionary = state.get("pending_skill_discard") as Dictionary
+	if not pending_skill_discard.is_empty() and _required_actor_id() == 0:
+		modal_layer.visible = true
+		var required_sum: int = int(pending_skill_discard.get("required_rank_sum", 0))
+		var minimum_count: int = int(pending_skill_discard.get("minimum_count", 1))
+		modal_title.text = "技能弃牌"
+		modal_description.text = "选择至少%d张牌，点数和必须为%d。当前点数和：%d" % [minimum_count, required_sum, _selected_staged_rank_sum()]
+		var human_skill: Dictionary = state.call("player", 0) as Dictionary
+		var skill_hand: Array = human_skill.get("hand", []) as Array
+		for index: int in skill_hand.size():
+			var skill_card_id := String(skill_hand[index])
+			var skill_card_definition := _card_definition_for_ui(skill_card_id)
+			var skill_card_button := CheckButton.new()
+			skill_card_button.text = "%s · 点数 %d" % [String(skill_card_definition.get("name", skill_card_id)), int(catalog.call("staged_instance_rank", skill_card_id))]
+			skill_card_button.tooltip_text = String(skill_card_definition.get("source_text", skill_card_definition.get("description", "")))
+			skill_card_button.button_pressed = discard_selected_indices.has(index)
+			skill_card_button.pressed.connect(_toggle_discard_selection.bind(index))
+			modal_actions.add_child(skill_card_button)
+		var skill_confirm := Button.new()
+		skill_confirm.text = "确认发动"
+		skill_confirm.disabled = _selected_staged_rank_sum() != required_sum or discard_selected_indices.size() < minimum_count
+		skill_confirm.pressed.connect(_confirm_skill_discard)
+		modal_actions.add_child(skill_confirm)
+		return
 	if not pending_discard.is_empty() and _required_actor_id() == 0:
 		modal_layer.visible = true
 		var required_count: int = int(pending_discard.get("required_count", 0))
@@ -864,6 +891,41 @@ func _toggle_discard_selection(index: int) -> void:
 	else:
 		discard_selected_indices.append(index)
 	_refresh_blocking_modal()
+
+
+func _selected_staged_rank_sum() -> int:
+	if state == null:
+		return 0
+	var hand: Array = (state.call("player", 0) as Dictionary).get("hand", []) as Array
+	var selected: Array[String] = []
+	for index: int in discard_selected_indices:
+		if index >= 0 and index < hand.size():
+			selected.append(String(hand[index]))
+	return int(catalog.call("staged_rank_sum", selected))
+
+
+func _card_definition_for_ui(card_id: String) -> Dictionary:
+	var definition: Dictionary = catalog.call("card", card_id) as Dictionary
+	if not definition.is_empty():
+		return definition
+	var separator := card_id.rfind("#")
+	if separator >= 0:
+		var staged := catalog.call("staged_card_instance", card_id.substr(0, separator), int(card_id.substr(separator + 1)) - 1) as Dictionary
+		if not staged.is_empty():
+			return staged
+	return {"id": card_id, "name": card_id}
+
+
+func _confirm_skill_discard() -> void:
+	var pending_skill_discard: Dictionary = state.get("pending_skill_discard") as Dictionary
+	var hand: Array = (state.call("player", 0) as Dictionary).get("hand", []) as Array
+	var card_ids: Array[String] = []
+	for index: int in discard_selected_indices:
+		if index >= 0 and index < hand.size():
+			card_ids.append(String(hand[index]))
+	var command := MatchCommandScript.make(MatchCommandScript.SKILL_DISCARD, 0, {"request_id": String(pending_skill_discard.get("request_id", "")), "card_ids": card_ids})
+	discard_selected_indices.clear()
+	_submit_human_command(command)
 
 
 func _confirm_discard() -> void:

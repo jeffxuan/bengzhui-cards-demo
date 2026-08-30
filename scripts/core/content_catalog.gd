@@ -137,6 +137,9 @@ func staged_card_instance(card_id: String, copy_index: int) -> Dictionary:
 			result["target"] = "enemy" if String(result.get("category", "")) == "attack" else "self"
 		if not result.has("range"):
 			result["range"] = 1 if String(result.get("category", "")) == "attack" else 0
+		if card_id == "soul_drain_new" or card_id == "armor_break_new":
+			result["target"] = "enemy"
+			result["range"] = 1
 		result["suit"] = instance.get("suit", "none")
 		result["rank"] = int(instance.get("rank", 0))
 		result["color"] = _color_for_suit(String(result.get("suit", "none")))

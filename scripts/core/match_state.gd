@@ -463,6 +463,7 @@ func _create_players(roster: Array[String]) -> void:
 		var profession_deck: Array[String] = _build_profession_deck(String(definition.get("profession", "")))
 		_shuffle_strings(common_deck)
 		_shuffle_strings(profession_deck)
+		_append_promoted_cards(common_deck)
 		var max_stamina: int = int(definition.get("stamina", 2))
 		var max_mana: int = int(definition.get("mana", 2))
 		var player_state: Dictionary = {
@@ -1613,9 +1614,14 @@ func _build_common_deck() -> Array[String]:
 		var profession: String = String(definition.get("profession", "neutral"))
 		if profession == "neutral" or String(definition.get("category", "")) == "equipment":
 			result.append(String(definition.get("id", "")))
-	for promoted_value: Variant in rules.get("promoted_staged_cards", []) as Array:
-		result.append_array(catalog.call("staged_instance_ids_for_card", String(promoted_value)) as Array[String])
 	return result
+
+
+func _append_promoted_cards(common_deck: Array[String]) -> void:
+	for promoted_value: Variant in rules.get("promoted_staged_cards", []) as Array:
+		var promoted_instances: Array[String] = catalog.call("staged_instance_ids_for_card", String(promoted_value)) as Array[String]
+		for index: int in promoted_instances.size():
+			common_deck.push_front(promoted_instances[index])
 
 
 func _build_profession_deck(profession: String) -> Array[String]:

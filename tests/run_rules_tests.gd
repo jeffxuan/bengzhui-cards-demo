@@ -21,6 +21,7 @@ func _init() -> void:
 	_test_targeting_and_public_history()
 	_test_purchased_cards_persist()
 	_test_thunderstorm_skill_discard()
+	_test_promoted_neutral_cards()
 	if failures.is_empty():
 		print("RULE_TESTS_OK: v4 resources, discard continuations, responses, pressure, targeting, and public history passed.")
 		quit(0)
@@ -76,7 +77,9 @@ func _test_content_contract() -> void:
 	_expect(not shooter_pool.has("berserker_blow_new#001"), "Profession draw pool must exclude other professions.")
 	_expect(int(rules.get("version", 0)) == 4, "Rules must be v4.")
 	_expect(not rules.has("round_limit"), "Round limit must be removed.")
-	_expect((rules.get("promoted_staged_cards", []) as Array).has("slash_new"), "The first safe staged card promotion must be configured.")
+	var promoted_cards: Array = rules.get("promoted_staged_cards", []) as Array
+	for promoted_id: String in ["slash_new", "iron_body_new", "purify_new", "hearty_meal_new", "calm_mind_new", "rally_new"]:
+		_expect(promoted_cards.has(promoted_id), "Safe staged card promotion must include %s." % promoted_id)
 	for character_value: Variant in catalog.get("characters") as Array:
 		for skill_value: Variant in (character_value as Dictionary).get("skills", []) as Array:
 			var cost: Dictionary = (skill_value as Dictionary).get("cost", {}) as Dictionary
@@ -303,6 +306,18 @@ func _test_thunderstorm_skill_discard() -> void:
 	unavailable_q["hand"] = ["slash_new#001"]
 	unavailable_state.players[0] = unavailable_q
 	_expect(_find_command(unavailable_state, MatchCommandScript.USE_SKILL, "q_thunderstorm").is_empty(), "Thunderstorm must not be legal when its discard requirement cannot be paid.")
+
+
+func _test_promoted_neutral_cards() -> void:
+	var state: RefCounted = _state(["q", "ginger", "maddy", "signal"], 112)
+	var q: Dictionary = state.call("player", 0) as Dictionary
+	var common_deck: Array = q.get("common_deck", []) as Array
+	for promoted_id: String in ["slash_new#001", "iron_body_new#001", "purify_new#001", "hearty_meal_new#001", "calm_mind_new#001", "rally_new#001"]:
+		_expect(common_deck.has(promoted_id), "Promoted neutral card %s must enter the public draw pool." % promoted_id)
+	q["hand"] = ["hearty_meal_new#001"]
+	state.players[0] = q
+	var meal := _find_command(state, MatchCommandScript.PLAY_CARD, "hearty_meal_new#001")
+	_expect(not meal.is_empty() and bool(state.call("submit_command", meal)), "Promoted Hearty Meal must be playable through the normal command path.")
 
 
 func _state(roster: Array[String], seed: int) -> RefCounted:

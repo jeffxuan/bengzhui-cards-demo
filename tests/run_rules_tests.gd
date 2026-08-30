@@ -78,7 +78,7 @@ func _test_content_contract() -> void:
 	_expect(int(rules.get("version", 0)) == 4, "Rules must be v4.")
 	_expect(not rules.has("round_limit"), "Round limit must be removed.")
 	var promoted_cards: Array = rules.get("promoted_staged_cards", []) as Array
-	for promoted_id: String in ["slash_new", "iron_body_new", "purify_new", "hearty_meal_new", "calm_mind_new", "rally_new", "soul_drain_new", "armor_break_new", "rapid_healing_new", "antidote_new", "blood_guard_new", "sacrifice_new", "feast_new", "swift_attack_new", "ghost_step_new", "holy_spring_guardian_new", "scout_new", "trek_new", "digging_new", "prayer_new", "echo_new", "greedy_grip_new"]:
+	for promoted_id: String in ["slash_new", "iron_body_new", "purify_new", "hearty_meal_new", "calm_mind_new", "rally_new", "soul_drain_new", "armor_break_new", "rapid_healing_new", "antidote_new", "blood_guard_new", "sacrifice_new", "feast_new", "swift_attack_new", "ghost_step_new", "holy_spring_guardian_new", "scout_new", "trek_new", "digging_new", "prayer_new", "echo_new", "greedy_grip_new", "thunder_strike_new", "blazing_blast_new", "chaos_wave_new", "vampire_bite_new", "blood_surge_new", "poisoned_strike_new"]:
 		_expect(promoted_cards.has(promoted_id), "Safe staged card promotion must include %s." % promoted_id)
 	var armor_break_definition: Dictionary = catalog.call("resolve_card", "armor_break_new#001") as Dictionary
 	_expect(String(armor_break_definition.get("target", "")) == "enemy" and int(armor_break_definition.get("range", 0)) == 1, "Armor Break must use an adjacent enemy target.")

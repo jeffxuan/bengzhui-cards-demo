@@ -290,7 +290,7 @@ func _test_thunderstorm_skill_discard() -> void:
 	_expect(bool(state.call("submit_command", valid)), "Thunderstorm should resolve after a valid rank-sum discard: %s" % String(state.get("last_error")))
 	_expect((state.get("pending_skill_discard") as Dictionary).is_empty(), "Skill discard request must clear after payment.")
 	var enemy_after: Dictionary = state.call("player", 1) as Dictionary
-	_expect(int(enemy_after.get("health", 0)) < 7 and int((enemy_after.get("statuses", {}) as Dictionary).get("paralyze", 0)) > 0, "Thunderstorm must damage and paralyze enemies in its area.")
+	_expect(int(enemy_after.get("health", 0)) < int(enemy_after.get("max_health", 0)) and int((enemy_after.get("statuses", {}) as Dictionary).get("paralyze", 0)) > 0, "Thunderstorm must damage and paralyze enemies in its area.")
 	var blocked_state: RefCounted = _state(["q", "ginger", "maddy", "signal"], 110)
 	var blocked_q: Dictionary = blocked_state.call("player", 0) as Dictionary
 	blocked_q["hand"] = ["rally_new#003", "crossfire_new#003"]

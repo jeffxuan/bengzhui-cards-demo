@@ -457,25 +457,29 @@ func _create_players(roster: Array[String]) -> void:
 		var definition: Dictionary = catalog.call("character", character_id) as Dictionary
 		if definition.is_empty():
 			definition = catalog.call("character", "q") as Dictionary
+		var staged_definition: Dictionary = catalog.call("staged_character", character_id) as Dictionary
+		var runtime_professions: Array = (staged_definition.get("professions", []) as Array).duplicate() if not staged_definition.is_empty() else (definition.get("professions", [String(definition.get("profession", "neutral"))]) as Array).duplicate()
+		var runtime_profession := String(runtime_professions[0]) if not runtime_professions.is_empty() else String(definition.get("profession", "neutral"))
 		var position: Vector2i = start_positions[seat] if seat < start_positions.size() else Vector2i(1 + (seat % 2) * 6, 1 + (seat / 2) * 6)
 		var starter_cards: Array[String] = _string_array(definition.get("starter_cards", []))
 		var common_deck: Array[String] = _build_common_deck()
-		var profession_deck: Array[String] = _build_profession_deck(String(definition.get("profession", "")))
+		var profession_deck: Array[String] = _build_profession_deck(runtime_profession)
 		_shuffle_strings(common_deck)
 		_shuffle_strings(profession_deck)
-		_append_promoted_cards(common_deck, profession_deck, String(definition.get("profession", "neutral")))
-		var max_stamina: int = int(definition.get("stamina", 2))
-		var max_mana: int = int(definition.get("mana", 2))
+		_append_promoted_cards(common_deck, profession_deck, runtime_profession)
+		var max_health: int = int(staged_definition.get("health", definition.get("health", 7)))
+		var max_stamina: int = int(staged_definition.get("stamina", definition.get("stamina", 2)))
+		var max_mana: int = int(staged_definition.get("mana", definition.get("mana", 2)))
 		var player_state: Dictionary = {
 			"id": seat,
 			"character_id": String(definition.get("id", "q")),
 			"name": String(definition.get("name", "Q")),
-			"profession": String(definition.get("profession", "neutral")),
-			"card_pool_profession": String(definition.get("profession", "neutral")),
-			"professions": (definition.get("professions", [String(definition.get("profession", "neutral"))]) as Array).duplicate(),
+			"profession": runtime_profession,
+			"card_pool_profession": runtime_profession,
+			"professions": runtime_professions,
 			"ai_persona": String(definition.get("ai_persona", "control")),
-			"health": int(definition.get("health", 7)),
-			"max_health": int(definition.get("health", 7)),
+			"health": max_health,
+			"max_health": max_health,
 			"stamina": 0,
 			"max_stamina": max_stamina,
 			"mana": 0,

@@ -33,6 +33,7 @@ jobs:
           if-no-files-found: error
 
   windows-release-smoke:
+    needs: verify
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -47,16 +48,11 @@ jobs:
         env:
           SIMULATION_MATCHES: 1000
         run: scripts/ci/verify.sh
-      - name: Prepare export directory
-        shell: pwsh
-        run: New-Item -ItemType Directory -Force export/windows | Out-Null
-      - name: Export Windows x86_64
-        shell: pwsh
-        run: |
-          $output = Join-Path $PWD 'export/windows/BengzhuiCards.exe'
-          & godot --headless --verbose --path $PWD --export-release "Windows Desktop" $output
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Get-ChildItem -Force -Recurse export
+      - name: Download Windows export
+        uses: actions/download-artifact@v4
+        with:
+          name: bengzhui-public-demo
+          path: export
       - name: Run Windows export smoke
         shell: pwsh
         run: |

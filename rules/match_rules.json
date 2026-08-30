@@ -16,7 +16,7 @@
   "market_size": 3,
   "market_buys_per_turn": 1,
   "event_deck_size": 16,
-  "promoted_staged_cards": ["slash_new", "iron_body_new", "purify_new", "hearty_meal_new", "calm_mind_new", "rally_new", "soul_drain_new", "armor_break_new", "rapid_healing_new", "antidote_new", "blood_guard_new", "sacrifice_new", "feast_new", "swift_attack_new", "ghost_step_new"],
+  "promoted_staged_cards": ["slash_new", "iron_body_new", "purify_new", "hearty_meal_new", "calm_mind_new", "rally_new", "soul_drain_new", "armor_break_new", "rapid_healing_new", "antidote_new", "blood_guard_new", "sacrifice_new", "feast_new", "swift_attack_new", "ghost_step_new", "holy_spring_guardian_new", "scout_new", "trek_new", "digging_new", "prayer_new", "echo_new", "greedy_grip_new"],
   "start_positions": [[2,2],[12,2],[2,12],[12,12]],
   "wealth_tiles": [[4,2],[10,2],[2,4],[12,4],[2,10],[12,10],[4,12],[10,12],[7,5],[7,9]],
   "event_tiles": [[7,2],[2,7],[12,7],[7,12],[4,4],[10,4],[4,10],[10,10],[5,5],[9,5],[5,9],[9,9]],

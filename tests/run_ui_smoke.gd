@@ -46,12 +46,18 @@ func _run() -> void:
 		_expect(_is_visible_enabled_button(root.gui_get_focus_owner()), "Character selection must give keyboard focus to a visible enabled button at %s." % str(viewport_size))
 		var start_button: Button = main.get("start_button") as Button
 		_expect(start_button != null, "Start command must exist at %s." % str(viewport_size))
+		main.call("_select_character", "k")
 		(main.get("settings") as Dictionary)["tutorial_seen"] = true
 		start_button.pressed.emit()
 		await process_frame
 		await process_frame
+		main.call("_submit_profession_choice", "")
+		await process_frame
+		await process_frame
 		var board: Control = main.get("board_view") as Control
 		var hand_band: Control = main.get("hand_band") as Control
+		var hand_box: HBoxContainer = main.get("hand_box") as HBoxContainer
+		var skill_box: VBoxContainer = main.get("skill_box") as VBoxContainer
 		var end_turn: Button = main.get("end_turn_button") as Button
 		var audio_feedback: Node = main.get("audio_feedback") as Node
 		_expect(board != null and board.size.x >= 360.0 and board.size.y >= 360.0, "Board must remain usable at %s." % str(viewport_size))
@@ -60,6 +66,9 @@ func _run() -> void:
 		_expect(hand_band != null and hand_band.get_global_rect().end.y <= float(viewport_size.y), "Hand band must remain inside %s (rect %s)." % [str(viewport_size), str(hand_band.get_global_rect() if hand_band != null else Rect2())])
 		_expect(end_turn != null and end_turn.is_visible_in_tree(), "End-turn command must remain visible at %s." % str(viewport_size))
 		_expect(audio_feedback != null and audio_feedback.get_child_count() == 6, "Audio feedback channels must be ready at %s." % str(viewport_size))
+		_expect(_has_suit_and_rank_button(hand_box), "The opening hand must visibly show a suit symbol and A-10/J/Q/K rank at %s." % str(viewport_size))
+		_expect(_has_button_containing(skill_box, "每回合限1次"), "K's once-per-turn skill limit must be visible at %s." % str(viewport_size))
+		_expect(_has_button_containing(skill_box, "本局每职业限1次"), "K's per-profession match limit must be visible at %s." % str(viewport_size))
 		_expect(_is_visible_enabled_button(root.gui_get_focus_owner()), "Match HUD must retain a usable keyboard focus target at %s." % str(viewport_size))
 		_test_board_keyboard(board, main, viewport_size)
 		main.call("_unhandled_key_input", _key_event(KEY_ESCAPE))
@@ -98,7 +107,7 @@ func _run() -> void:
 		var tutorial_close: Button = modal_actions.get_child(0) as Button
 		tutorial_close.pressed.emit()
 		await process_frame
-		var skill_box: VBoxContainer = main.get("skill_box") as VBoxContainer
+		skill_box = main.get("skill_box") as VBoxContainer
 		var skill_button: Button = _first_enabled_button(skill_box)
 		_expect(skill_button != null, "At least one starting skill must be usable at %s." % str(viewport_size))
 		if skill_button != null:
@@ -167,6 +176,24 @@ func _first_enabled_button(node: Node) -> Button:
 		if child is Button and not (child as Button).disabled:
 			return child as Button
 	return null
+
+
+func _has_button_containing(node: Node, needle: String) -> bool:
+	if node is Button and (node as Button).text.contains(needle):
+		return true
+	for child: Node in node.get_children():
+		if _has_button_containing(child, needle):
+			return true
+	return false
+
+
+func _has_suit_and_rank_button(node: Node) -> bool:
+	var identity_pattern := RegEx.new()
+	identity_pattern.compile("^[♠♥♣♦] (A|[2-9]|10|J|Q|K) · ")
+	for child: Node in node.get_children():
+		if child is Button and identity_pattern.search((child as Button).text) != null:
+			return true
+	return false
 
 
 func _find_label_containing(node: Node, needle: String) -> Label:

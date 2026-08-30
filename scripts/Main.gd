@@ -410,7 +410,7 @@ func _sidebar_scroll(content: Control, width: int) -> ScrollContainer:
 func _build_hand_band() -> Control:
 	var panel: PanelContainer = _panel(COLORS["surface"] as Color)
 	hand_band = panel
-	panel.custom_minimum_size.y = 150
+	panel.custom_minimum_size.y = 164
 	var row: HBoxContainer = HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	panel.add_child(row)
@@ -418,7 +418,7 @@ func _build_hand_band() -> Control:
 	hand_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hand_column.add_theme_constant_override("separation", 6)
 	row.add_child(hand_column)
-	hand_column.add_child(_section_label("手牌"))
+	hand_column.add_child(_section_label("手牌 · 花色 / 点数"))
 	var scroll: ScrollContainer = ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -526,14 +526,14 @@ func _refresh_hand() -> void:
 		var card_id: String = String(card_value)
 		var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
 		var button: Button = Button.new()
-		button.custom_minimum_size = Vector2(260, 82)
+		button.custom_minimum_size = Vector2(260, 96)
 		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		var source_label: String = " · 商店保留" if card_index >= display_hand.size() - purchased_count else ""
-		var identity_text := _card_identity_text(definition)
-		var identity_suffix := " · %s" % identity_text if not identity_text.is_empty() else ""
-		button.text = "%s%s%s\n%s · %s\n%s" % [String(definition.get("name", card_id)), source_label, identity_suffix, _cost_text(definition), _range_text(definition), _short_text(String(definition.get("description", "")), 28)]
+		var identity_badge := _card_identity_badge(definition)
+		var identity_prefix := "%s · " % identity_badge if not identity_badge.is_empty() else "旧版牌 · "
+		button.text = "%s%s%s\n%s · %s\n%s" % [identity_prefix, String(definition.get("name", card_id)), source_label, _cost_text(definition), _range_text(definition), _short_text(String(definition.get("description", "")), 28)]
 		button.icon = _category_icon(String(definition.get("category", "")))
-		button.tooltip_text = "%s\n%s · %s\n%s" % [String(definition.get("name", card_id)), _card_identity_text(definition), _cost_text(definition), String(definition.get("description", ""))]
+		button.tooltip_text = "%s\n%s\n%s · %s\n%s" % [String(definition.get("name", card_id)), _card_identity_text(definition), _cost_text(definition), _range_text(definition), String(definition.get("description", ""))]
 		button.disabled = not _has_definition_command(legal, MatchCommandScript.PLAY_CARD, card_id)
 		button.pressed.connect(_select_card.bind(card_id))
 		hand_box.add_child(button)
@@ -544,8 +544,21 @@ func _card_identity_text(definition: Dictionary) -> String:
 	var suit := String(definition.get("suit", "none"))
 	var rank := int(definition.get("rank", 0))
 	if suit == "none" and rank <= 0:
+		return "无花色 / 无点数（旧版兼容牌）"
+	return "%s %s · 点数 %s" % [String(suit_names.get(suit, suit)), _suit_symbol(suit), _rank_label(rank)]
+
+
+func _card_identity_badge(definition: Dictionary) -> String:
+	var suit := String(definition.get("suit", "none"))
+	var rank := int(definition.get("rank", 0))
+	if suit == "none" or rank <= 0:
 		return ""
-	return "%s %s" % [String(suit_names.get(suit, suit)), _rank_label(rank)]
+	return "%s %s" % [_suit_symbol(suit), _rank_label(rank)]
+
+
+func _suit_symbol(suit: String) -> String:
+	var symbols := {"hearts": "♥", "diamonds": "♦", "clubs": "♣", "spades": "♠"}
+	return String(symbols.get(suit, ""))
 
 
 func _rank_label(rank: int) -> String:
@@ -553,6 +566,17 @@ func _rank_label(rank: int) -> String:
 		return ""
 	var labels := {1: "A", 11: "J", 12: "Q", 13: "K"}
 	return String(labels.get(rank, str(rank)))
+
+
+func _skill_usage_text(policy: Dictionary) -> String:
+	var limits: Array[String] = []
+	var turn_limit := int(policy.get("uses_per_turn", 0))
+	if turn_limit > 0:
+		limits.append("每回合限%d次 · 剩余%d" % [turn_limit, int(policy.get("remaining_this_turn", turn_limit))])
+	var profession_limit := int(policy.get("uses_per_profession_per_match", 0))
+	if profession_limit > 0:
+		limits.append("本局每职业限%d次 · 当前剩余%d" % [profession_limit, int(policy.get("remaining_for_profession", profession_limit))])
+	return "不限次数" if limits.is_empty() else " / ".join(limits)
 
 
 func _refresh_skills() -> void:
@@ -583,21 +607,24 @@ func _refresh_skills() -> void:
 	for skill_value: Variant in character_definition.get("skills", []) as Array:
 		var skill: Dictionary = skill_value as Dictionary
 		var skill_id: String = String(skill.get("id", ""))
+		var usage_policy: Dictionary = state.call("skill_usage_policy", 0, skill_id) as Dictionary
+		var usage_text := _skill_usage_text(usage_policy)
 		var button: Button = Button.new()
-		button.custom_minimum_size.y = 54
+		button.custom_minimum_size.y = 66
 		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		button.text = "%s · 无行动点限制 · 无资源消耗 · %s\n%s" % [String(skill.get("name", skill_id)), _range_text(skill), _short_text(String(skill.get("description", "")), 20)]
+		button.text = "%s · %s\n无资源消耗 · %s\n%s" % [String(skill.get("name", skill_id)), usage_text, _range_text(skill), _short_text(String(skill.get("description", "")), 20)]
 		button.icon = load("res://assets/third_party/lucide/sparkles.svg") as Texture2D
-		button.tooltip_text = String(skill.get("description", ""))
+		button.tooltip_text = "%s\n使用限制：%s\n%s" % [String(skill.get("name", skill_id)), usage_text, String(skill.get("description", ""))]
 		button.disabled = not _has_definition_command(legal, MatchCommandScript.USE_SKILL, skill_id)
 		button.pressed.connect(_select_skill.bind(skill_id))
 		skill_box.add_child(button)
 	var staged_thunderstorm: Dictionary = state.call("_skill_definition", 0, "q_thunderstorm") as Dictionary
 	if not staged_thunderstorm.is_empty():
 		var staged_button := Button.new()
-		staged_button.custom_minimum_size.y = 54
+		staged_button.custom_minimum_size.y = 66
 		staged_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		staged_button.text = "%s · 无行动点限制 · 弃牌点数和23 · %s\n暂存技能（provisional）" % [String(staged_thunderstorm.get("name", "雷暴")), _range_text(staged_thunderstorm)]
+		var staged_usage := _skill_usage_text(state.call("skill_usage_policy", 0, "q_thunderstorm") as Dictionary)
+		staged_button.text = "%s · %s\n弃牌点数和23 · %s\n暂存技能（provisional）" % [String(staged_thunderstorm.get("name", "雷暴")), staged_usage, _range_text(staged_thunderstorm)]
 		staged_button.icon = load("res://assets/third_party/lucide/sparkles.svg") as Texture2D
 		var thunderstorm_available := _has_definition_command(legal, MatchCommandScript.USE_SKILL, "q_thunderstorm")
 		staged_button.tooltip_text = String(staged_thunderstorm.get("source_text", staged_thunderstorm.get("description", ""))) if thunderstorm_available else "%s\n当前手牌无法凑出点数和 23。" % String(staged_thunderstorm.get("source_text", staged_thunderstorm.get("description", "")))
@@ -614,9 +641,10 @@ func _refresh_market() -> void:
 		var card_id: String = market_cards[market_index]
 		var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
 		var button: Button = Button.new()
-		button.custom_minimum_size.y = 48
-		button.text = "%s%s  ·  %d金币" % [String(definition.get("name", card_id)), (" · " + _card_identity_text(definition)) if not _card_identity_text(definition).is_empty() else "", int(definition.get("price", 0))]
-		button.tooltip_text = String(definition.get("description", ""))
+		button.custom_minimum_size.y = 56
+		var market_badge := _card_identity_badge(definition)
+		button.text = "%s%s\n%d金币" % [(market_badge + " · ") if not market_badge.is_empty() else "旧版牌 · ", String(definition.get("name", card_id)), int(definition.get("price", 0))]
+		button.tooltip_text = "%s\n%s\n%s" % [String(definition.get("name", card_id)), _card_identity_text(definition), String(definition.get("description", ""))]
 		button.disabled = not _has_buy_command(legal, market_index)
 		button.pressed.connect(_buy_market.bind(market_index))
 		market_box.add_child(button)
@@ -735,7 +763,40 @@ func _after_state_change() -> void:
 	elif not SaveServiceScript.save_replay(state.call("replay_document") as Dictionary):
 		log_lines.append("[color=#e2706a]无法写入对局存档；请检查存储空间或目录权限。[/color]")
 	_refresh_match_ui()
+	_restore_match_focus.call_deferred()
 	_schedule_ai()
+
+
+func _restore_match_focus() -> void:
+	if settings_open or screen_root == null:
+		return
+	var current_focus := get_viewport().gui_get_focus_owner()
+	if current_focus != null and is_instance_valid(current_focus) and current_focus.is_visible_in_tree():
+		if not (current_focus is Button) or not (current_focus as Button).disabled:
+			return
+	var fallback := _first_enabled_button_in(modal_actions) if modal_layer != null and modal_layer.visible else null
+	if fallback == null and end_turn_button != null and not end_turn_button.disabled:
+		fallback = end_turn_button
+	if fallback == null:
+		fallback = _first_enabled_button_in(skill_box)
+	if fallback == null:
+		fallback = _first_enabled_button_in(hand_box)
+	if fallback != null:
+		fallback.grab_focus()
+	elif board_view != null:
+		board_view.grab_focus()
+
+
+func _first_enabled_button_in(node: Node) -> Button:
+	if node == null:
+		return null
+	if node is Button and not (node as Button).disabled and node.is_visible_in_tree():
+		return node as Button
+	for child: Node in node.get_children():
+		var match_button := _first_enabled_button_in(child)
+		if match_button != null:
+			return match_button
+	return null
 
 
 func _collect_events() -> void:
@@ -839,8 +900,9 @@ func _refresh_blocking_modal() -> void:
 			var skill_card_id := String(skill_hand[index])
 			var skill_card_definition := _card_definition_for_ui(skill_card_id)
 			var skill_card_button := CheckButton.new()
-			skill_card_button.text = "%s · %s" % [String(skill_card_definition.get("name", skill_card_id)), _card_identity_text(skill_card_definition)]
-			skill_card_button.tooltip_text = String(skill_card_definition.get("source_text", skill_card_definition.get("description", "")))
+			var skill_badge := _card_identity_badge(skill_card_definition)
+			skill_card_button.text = "%s%s" % [(skill_badge + " · ") if not skill_badge.is_empty() else "旧版牌 · ", String(skill_card_definition.get("name", skill_card_id))]
+			skill_card_button.tooltip_text = "%s\n%s" % [_card_identity_text(skill_card_definition), String(skill_card_definition.get("source_text", skill_card_definition.get("description", "")))]
 			skill_card_button.button_pressed = discard_selected_indices.has(index)
 			skill_card_button.pressed.connect(_toggle_discard_selection.bind(index))
 			modal_actions.add_child(skill_card_button)
@@ -861,8 +923,9 @@ func _refresh_blocking_modal() -> void:
 			var card_id: String = String(hand[index])
 			var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
 			var card_button: CheckButton = CheckButton.new()
-			card_button.text = "%s · %s" % [String(definition.get("name", card_id)), _range_text(definition)]
-			card_button.tooltip_text = String(definition.get("description", ""))
+			var discard_badge := _card_identity_badge(definition)
+			card_button.text = "%s%s · %s" % [(discard_badge + " · ") if not discard_badge.is_empty() else "旧版牌 · ", String(definition.get("name", card_id)), _range_text(definition)]
+			card_button.tooltip_text = "%s\n%s" % [_card_identity_text(definition), String(definition.get("description", ""))]
 			card_button.button_pressed = discard_selected_indices.has(index)
 			card_button.disabled = not card_button.button_pressed and discard_selected_indices.size() >= required_count
 			card_button.pressed.connect(_toggle_discard_selection.bind(index))
@@ -980,7 +1043,8 @@ func _show_player_history(player_id: int) -> void:
 	for entry_value: Variant in player_state.get("public_card_history", []) as Array:
 		var entry: Dictionary = entry_value as Dictionary
 		var definition: Dictionary = catalog.call("resolve_card", String(entry.get("card_id", ""))) as Dictionary
-		var line: Label = _label("第%d轮 · %s%s · %s\n%s" % [int(entry.get("round", 0)), String(definition.get("name", entry.get("card_id", ""))), (" · " + _card_identity_text(definition)) if not _card_identity_text(definition).is_empty() else "", _range_text(definition), String(definition.get("description", ""))], 14, COLORS["ink"] as Color)
+		var history_badge := _card_identity_badge(definition)
+		var line: Label = _label("第%d轮 · %s%s · %s\n%s\n%s" % [int(entry.get("round", 0)), (history_badge + " · ") if not history_badge.is_empty() else "旧版牌 · ", String(definition.get("name", entry.get("card_id", ""))), _range_text(definition), _card_identity_text(definition), String(definition.get("description", ""))], 14, COLORS["ink"] as Color)
 		line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		modal_actions.add_child(line)
 	if modal_actions.get_child_count() == 0:

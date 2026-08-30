@@ -453,7 +453,7 @@ func _validate_cards() -> void:
 		_validate_card_metadata(card_definition)
 		_validate_effects(card_definition.get("effects", []), "card %s" % card_id)
 		if String(card_definition.get("category", "")) == "response" and not ["heavenly_sense", "shrug_off"].has(card_id):
-			validation_errors.append("Response card %s is not allowed in v4." % card_id)
+			validation_errors.append("Response card %s is not allowed by the v5 launch rules." % card_id)
 	if cards_by_instance_id.size() != card_instances.size():
 		validation_errors.append("Card instance IDs must be globally unique.")
 

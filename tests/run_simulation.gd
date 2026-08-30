@@ -91,10 +91,10 @@ func _init() -> void:
 	for character_id: String in character_ids:
 		var index: float = 200.0 * float(wins.get(character_id, 0)) / float(maxi(1, int(appearances.get(character_id, 0))))
 		balance_index[character_id] = snappedf(index, 0.01)
-		# Dev.2 keeps this as an early-warning gate while the new no-round-limit
+		# Dev.4 keeps this as an early-warning gate while revised content is provisional;
 		# meta settles; the public-candidate gate remains 42-58 in the checklist.
 		if match_count >= 1000 and (index < 35.0 or index > 65.0):
-			print("SIMULATION_BALANCE_NOTE: %s=%.2f is outside the dev.2 early-warning band." % [character_id, index])
+			print("SIMULATION_BALANCE_NOTE: %s=%.2f is outside the dev.4 early-warning band." % [character_id, index])
 	var average_commands: float = float(total_commands) / float(match_count)
 	var last_survivor_rate: float = 100.0 * float(finish_reasons.get("last_survivor", 0)) / float(match_count)
 	var gate_failures: Array[String] = balance_failures.duplicate()

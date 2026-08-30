@@ -7,6 +7,23 @@ const MatchEventScript = preload("res://scripts/core/match_event.gd")
 const CARDINAL_DIRECTIONS: Array[Vector2i] = [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]
 const TARGET_EFFECTS: Array[String] = ["damage", "heal", "armor", "status", "remove_status", "break_armor", "push", "steal_card", "draw_target"]
 const NEGATIVE_STATUSES: Array[String] = ["paralyze", "bleed", "poison", "confusion"]
+const REVISED_SKILL_ALIASES: Dictionary = {
+	"q_stargaze": "q_thunder_guard",
+	"q_thunder_call": "q_thunderstorm",
+	"k_megamind": "k_brain",
+	"k_brainstorm": "k_strategy",
+	"shya_dazzling_flash": "shya_break_flash",
+	"shya_flash_break": "shya_break_flash",
+	"ginger_fist_way": "ginger_waist",
+	"ginger_guard_up": "ginger_power",
+	"zc_madness": "zc_frenzy",
+	"zc_poison_mist": "zc_frenzy",
+	"na1_foresight": "na1_foresight",
+	"na1_free_spirit": "na1_endless",
+	"maddy_prospect": "maddy_explore",
+	"maddy_reclamation": "maddy_reclaim",
+	"signal_frequency": "signal_frequency"
+}
 
 var rules: Dictionary
 var catalog: RefCounted
@@ -378,6 +395,7 @@ func deterministic_snapshot() -> Dictionary:
 			"statuses": (player_state["statuses"] as Dictionary).duplicate(true),
 			"skills_used": (player_state.get("skills_used", {}) as Dictionary).duplicate(),
 			"skill_uses": (player_state.get("skill_uses", {}) as Dictionary).duplicate(),
+			"skill_match_uses": (player_state.get("skill_match_uses", {}) as Dictionary).duplicate(),
 			"turn_commands": int(player_state.get("turn_commands", 0)),
 			"alive": bool(player_state["alive"])
 		})
@@ -507,6 +525,7 @@ func _create_players(roster: Array[String]) -> void:
 			"flags": {},
 			"skills_used": {},
 			"skill_uses": {},
+			"skill_match_uses": {},
 			"turn_commands": 0,
 			"match_flags": {},
 			"last_card_id": "",
@@ -583,7 +602,10 @@ func _handle_switch_profession(payload: Dictionary) -> void:
 	var converted: bool = not selected.is_empty() and selected != String(active.get("profession", ""))
 	if converted:
 		active["profession"] = selected
-		active["profession_deck"] = _build_profession_deck(selected)
+		var next_profession_deck := _build_profession_deck(selected)
+		_shuffle_strings(next_profession_deck)
+		_append_promoted_profession_cards(next_profession_deck, selected)
+		active["profession_deck"] = next_profession_deck
 		active["profession_discard"] = []
 		active["card_pool_profession"] = selected
 	players[active_player_index] = active
@@ -676,9 +698,15 @@ func _legal_skill_commands(actor_id: int) -> Array[Dictionary]:
 			continue
 		var skill: Dictionary = skill_value as Dictionary
 		var skill_id: String = String(skill.get("id", ""))
-		var uses_per_turn := int(skill.get("uses_per_turn", 0))
+		var policy := skill_usage_policy(actor_id, skill_id)
+		var uses_per_turn := int(policy.get("uses_per_turn", skill.get("uses_per_turn", 0)))
 		var skill_uses := int((players[actor_id].get("skill_uses", {}) as Dictionary).get(skill_id, 0))
 		if uses_per_turn > 0 and skill_uses >= uses_per_turn:
+			continue
+		var uses_per_profession_per_match := int(policy.get("uses_per_profession_per_match", 0))
+		var match_key := _skill_match_usage_key(actor_id, skill_id)
+		var match_uses := int((players[actor_id].get("skill_match_uses", {}) as Dictionary).get(match_key, 0))
+		if uses_per_profession_per_match > 0 and match_uses >= uses_per_profession_per_match:
 			continue
 		result.append_array(_target_commands(MatchCommandScript.USE_SKILL, actor_id, skill_id, skill))
 	var staged_hand_available := false
@@ -692,6 +720,35 @@ func _legal_skill_commands(actor_id: int) -> Array[Dictionary]:
 		if not staged_thunderstorm.is_empty() and _rank_sum_selection_possible(players[actor_id].get("hand", []) as Array, int(requirement.get("rank_sum", 0)), int(requirement.get("minimum_cards", 1))):
 			result.append_array(_target_commands(MatchCommandScript.USE_SKILL, actor_id, "q_thunderstorm", staged_thunderstorm))
 	return result
+
+
+func skill_usage_policy(player_id: int, skill_id: String) -> Dictionary:
+	if player_id < 0 or player_id >= players.size():
+		return {}
+	var character_id := String(players[player_id].get("character_id", ""))
+	var revised_skill_id := String(REVISED_SKILL_ALIASES.get(skill_id, skill_id))
+	var revised_skill: Dictionary = catalog.call("staged_skill", character_id, revised_skill_id) as Dictionary
+	if revised_skill.is_empty():
+		return {}
+	var uses_per_turn := int(revised_skill.get("uses_per_turn", 0))
+	var used_this_turn := int((players[player_id].get("skill_uses", {}) as Dictionary).get(skill_id, 0))
+	var uses_per_profession_per_match := int(revised_skill.get("uses_per_profession_per_match", 0))
+	var match_key := _skill_match_usage_key(player_id, skill_id)
+	var used_for_profession := int((players[player_id].get("skill_match_uses", {}) as Dictionary).get(match_key, 0))
+	return {
+		"revised_skill_id": revised_skill_id,
+		"revised_name": String(revised_skill.get("name", skill_id)),
+		"uses_per_turn": uses_per_turn,
+		"used_this_turn": used_this_turn,
+		"remaining_this_turn": maxi(0, uses_per_turn - used_this_turn) if uses_per_turn > 0 else -1,
+		"uses_per_profession_per_match": uses_per_profession_per_match,
+		"used_for_profession": used_for_profession,
+		"remaining_for_profession": maxi(0, uses_per_profession_per_match - used_for_profession) if uses_per_profession_per_match > 0 else -1
+	}
+
+
+func _skill_match_usage_key(player_id: int, skill_id: String) -> String:
+	return "%s:%s" % [skill_id, String(players[player_id].get("profession", "neutral"))]
 
 
 func _rank_sum_selection_possible(hand: Array, required_sum: int, minimum_count: int, index: int = 0, current_sum: int = 0, count: int = 0) -> bool:
@@ -825,6 +882,12 @@ func _handle_use_skill(payload: Dictionary) -> void:
 	var skill_uses: Dictionary = players[actor_id].get("skill_uses", {}) as Dictionary
 	skill_uses[skill_id] = int(skill_uses.get(skill_id, 0)) + 1
 	players[actor_id]["skill_uses"] = skill_uses
+	var policy := skill_usage_policy(actor_id, skill_id)
+	if int(policy.get("uses_per_profession_per_match", 0)) > 0:
+		var match_uses: Dictionary = players[actor_id].get("skill_match_uses", {}) as Dictionary
+		var match_key := _skill_match_usage_key(actor_id, skill_id)
+		match_uses[match_key] = int(match_uses.get(match_key, 0)) + 1
+		players[actor_id]["skill_match_uses"] = match_uses
 	var discard_requirement: Dictionary = skill.get("discard_requirement", {}) as Dictionary
 	if not discard_requirement.is_empty():
 		pending_skill_discard = {
@@ -1628,13 +1691,22 @@ func _append_promoted_cards(common_deck: Array[String], profession_deck: Array[S
 		if promoted_definition.is_empty():
 			continue
 		var promoted_profession := String(promoted_definition.get("profession", "neutral"))
-		var is_common := promoted_profession == "neutral" or String(promoted_definition.get("category", "")) == "equipment"
+		var is_common := promoted_profession == "neutral"
 		if not is_common and promoted_profession != profession:
 			continue
 		var target_deck: Array[String] = common_deck if is_common else profession_deck
 		var promoted_instances: Array[String] = catalog.call("staged_instance_ids_for_card", promoted_id) as Array[String]
 		for index: int in promoted_instances.size():
-			target_deck.push_front(promoted_instances[index])
+			target_deck.push_back(promoted_instances[index])
+
+
+func _append_promoted_profession_cards(profession_deck: Array[String], profession: String) -> void:
+	for promoted_value: Variant in rules.get("promoted_staged_cards", []) as Array:
+		var promoted_id := String(promoted_value)
+		var promoted_definition: Dictionary = catalog.call("staged_card_instance", promoted_id, 0) as Dictionary
+		if String(promoted_definition.get("profession", "neutral")) != profession:
+			continue
+		profession_deck.append_array(catalog.call("staged_instance_ids_for_card", promoted_id) as Array[String])
 
 
 func _build_profession_deck(profession: String) -> Array[String]:

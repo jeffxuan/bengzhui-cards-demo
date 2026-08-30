@@ -185,6 +185,10 @@ func _score_definition(state: RefCounted, actor_id: int, payload: Dictionary, is
 	var actor: Dictionary = state.call("player", actor_id) as Dictionary
 	var score: float = 15.0
 	var target_id: int = int(payload.get("target_id", actor_id))
+	var alive_count := 0
+	for player_value: Variant in state.get("players") as Array:
+		if bool((player_value as Dictionary).get("alive", false)):
+			alive_count += 1
 	for effect_value: Variant in definition.get("effects", []) as Array:
 		if not effect_value is Dictionary:
 			continue
@@ -193,6 +197,8 @@ func _score_definition(state: RefCounted, actor_id: int, payload: Dictionary, is
 		var amount: float = float(effect.get("amount", effect.get("stacks", 0)))
 		if operation == "damage":
 			score += 22.0 + amount * (9.0 if persona == "offense" else 7.0)
+			if alive_count == 2:
+				score += 40.0
 			if target_id >= 0:
 				var target: Dictionary = state.call("player", target_id) as Dictionary
 				if int(target.get("health", 99)) <= int(amount):

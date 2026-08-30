@@ -61,6 +61,6 @@ jobs:
           & $executable --export-smoke
       - uses: actions/upload-artifact@v4
         with:
-          name: bengzhui-windows-dev2
+          name: bengzhui-windows-dev4
           path: export/windows/
           if-no-files-found: error

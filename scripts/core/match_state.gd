@@ -1613,6 +1613,8 @@ func _build_common_deck() -> Array[String]:
 		var profession: String = String(definition.get("profession", "neutral"))
 		if profession == "neutral" or String(definition.get("category", "")) == "equipment":
 			result.append(String(definition.get("id", "")))
+	for promoted_value: Variant in rules.get("promoted_staged_cards", []) as Array:
+		result.append_array(catalog.call("staged_instance_ids_for_card", String(promoted_value)) as Array[String])
 	return result
 
 

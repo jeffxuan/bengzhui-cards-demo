@@ -133,6 +133,10 @@ func staged_card_instance(card_id: String, copy_index: int) -> Dictionary:
 		result["card_id"] = card_id
 		result["instance_id"] = "%s#%03d" % [card_id, copy_index + 1]
 		result["description"] = String(definition.get("description", definition.get("source_text", "")))
+		if not result.has("target"):
+			result["target"] = "enemy" if String(result.get("category", "")) == "attack" else "self"
+		if not result.has("range"):
+			result["range"] = 1 if String(result.get("category", "")) == "attack" else 0
 		result["suit"] = instance.get("suit", "none")
 		result["rank"] = int(instance.get("rank", 0))
 		result["color"] = _color_for_suit(String(result.get("suit", "none")))
@@ -145,6 +149,18 @@ func staged_card_ids_for_profession(profession: String) -> Array[String]:
 	for definition: Dictionary in staged_cards:
 		if String(definition.get("profession", "")) == profession:
 			result.append(String(definition.get("id", "")))
+	return result
+
+
+func staged_instance_ids_for_card(card_id: String) -> Array[String]:
+	var result: Array[String] = []
+	for definition: Dictionary in staged_cards:
+		if String(definition.get("id", "")) != card_id:
+			continue
+		var instances: Array = definition.get("instances", []) as Array
+		for index: int in instances.size():
+			result.append("%s#%03d" % [card_id, index + 1])
+		break
 	return result
 
 

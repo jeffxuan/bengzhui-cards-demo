@@ -76,6 +76,7 @@ func _test_content_contract() -> void:
 	_expect(not shooter_pool.has("berserker_blow_new#001"), "Profession draw pool must exclude other professions.")
 	_expect(int(rules.get("version", 0)) == 4, "Rules must be v4.")
 	_expect(not rules.has("round_limit"), "Round limit must be removed.")
+	_expect((rules.get("promoted_staged_cards", []) as Array).has("slash_new"), "The first safe staged card promotion must be configured.")
 	for character_value: Variant in catalog.get("characters") as Array:
 		for skill_value: Variant in (character_value as Dictionary).get("skills", []) as Array:
 			var cost: Dictionary = (skill_value as Dictionary).get("cost", {}) as Dictionary

@@ -19,6 +19,8 @@ func choose_command(state: RefCounted, actor_id: int) -> Dictionary:
 		return _choose_discard_command(state, actor_id, commands[0].get("payload", {}) as Dictionary)
 	if String(commands[0].get("type", "")) == MatchCommandScript.SKILL_DISCARD:
 		return _choose_skill_discard_command(state, actor_id, commands[0].get("payload", {}) as Dictionary)
+	if String(commands[0].get("type", "")) == MatchCommandScript.SKILL_CHOICE:
+		return commands[0].duplicate(true)
 	var persona: String = String((state.call("player", actor_id) as Dictionary).get("ai_persona", "control"))
 	var best_command: Dictionary = commands[0]
 	var best_score: float = -1000000.0

@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "events": [
     {"id":"qingquan_one_move","title":"清泉山人的指导：一招鲜","source_text":"选择一种牌，本回合你使用该牌零消耗。","effects":[{"op":"provisional","text":"选择一种牌并在本回合零消耗。"}],"provisional":true},
     {"id":"qingquan_many_solutions","title":"清泉山人的指导：多解式","source_text":"本轮可将任意防御牌视为三种基础防御牌使用。","effects":[{"op":"provisional","text":"防御牌转换。"}],"provisional":true},

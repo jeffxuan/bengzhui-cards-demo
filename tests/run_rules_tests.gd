@@ -27,7 +27,7 @@ func _init() -> void:
 	_test_thunderstorm_skill_discard()
 	_test_revised_decks_and_equipment_costs()
 	if failures.is_empty():
-		print("RULE_TESTS_OK: v7 revised decks, K Brain, Ginger Waist, skill metadata, suits/ranks, responses, and continuations passed.")
+		print("RULE_TESTS_OK: v8 revised skills, choice flows, suits/ranks, responses, and continuations passed.")
 		quit(0)
 		return
 	for failure: String in failures:
@@ -80,9 +80,9 @@ func _test_content_contract() -> void:
 	var shooter_pool: Array = catalog.call("staged_draw_pool_for_profession", "shooter") as Array
 	_expect(shooter_pool.has("slash_new#001") and shooter_pool.has("sniper_new#001"), "Profession draw pool must include common and current-profession cards.")
 	_expect(not shooter_pool.has("berserker_blow_new#001"), "Profession draw pool must exclude other professions.")
-	_expect(int(rules.get("version", 0)) == 7, "Rules must be v7.")
+	_expect(int(rules.get("version", 0)) == 8, "Rules must be v8.")
 	_expect(not rules.has("round_limit"), "Round limit must be removed.")
-	_expect(not rules.has("promoted_staged_cards"), "v7 must not retain a partial revised-card promotion list.")
+	_expect(not rules.has("promoted_staged_cards"), "v8 must not retain a partial revised-card promotion list.")
 	var armor_break_definition: Dictionary = catalog.call("resolve_card", "armor_break_new#001") as Dictionary
 	_expect(String(armor_break_definition.get("target", "")) == "enemy" and int(armor_break_definition.get("range", 0)) == 1, "Armor Break must use an adjacent enemy target.")
 	var weapon_definition: Dictionary = catalog.call("resolve_card", "crowbar_new#001") as Dictionary
@@ -174,15 +174,20 @@ func _test_revised_skill_usage_limits() -> void:
 
 	var strategy_policy: Dictionary = k_state.call("skill_usage_policy", 0, "k_brainstorm") as Dictionary
 	_expect(int(strategy_policy.get("uses_per_profession_per_match", 0)) == 1, "K Strategy must expose its per-profession match limit.")
-	_expect(not bool(strategy_policy.get("executable", true)), "K Strategy must be visibly blocked until its arbitrary-card selection is implemented.")
-	_expect(_find_command(k_state, MatchCommandScript.USE_SKILL, "k_brainstorm").is_empty(), "K Strategy must not execute the removed legacy draw and extra-action effect.")
+	_expect(bool(strategy_policy.get("executable", false)), "K Strategy must be executable through the new deterministic choice flow.")
+	var strategy_command := _find_command(k_state, MatchCommandScript.USE_SKILL, "k_brainstorm")
+	_expect(not strategy_command.is_empty() and bool(k_state.call("submit_command", strategy_command)), "K Strategy must open its arbitrary strange-card choice.")
+	_expect(String((k_state.get("pending_skill_choice") as Dictionary).get("kind", "")) == "k_strategy_card", "K Strategy must first select one strange card.")
 	var k_player: Dictionary = k_state.call("player", 0) as Dictionary
 	k_player["profession"] = "ambitionist"
 	k_state.players[0] = k_player
 	strategy_policy = k_state.call("skill_usage_policy", 0, "k_brainstorm") as Dictionary
 	_expect(int(strategy_policy.get("remaining_for_profession", -1)) == 1, "K Strategy must have a separate use in the second profession.")
-	_expect(_find_command(k_state, MatchCommandScript.USE_SKILL, "k_brainstorm").is_empty(), "Changing profession must not restore K Strategy's removed legacy effect.")
+	_expect(int(strategy_policy.get("remaining_for_profession", -1)) == 1, "Changing profession must preserve a separate displayed profession limit.")
 	var staged_strategy: Dictionary = catalog.call("staged_skill", "k", "k_strategy") as Dictionary
+	k_player = k_state.call("player", 0) as Dictionary
+	k_player["mana"] = int(k_player.get("max_mana", 0))
+	k_state.players[0] = k_player
 	_expect(bool(k_state.call("_can_pay_skill", 0, staged_strategy, "normal")), "K Strategy normal resource payment must be valid with available mana.")
 	var paid: Dictionary = k_state.call("_pay_skill_resources", 0, staged_strategy, "normal") as Dictionary
 	_expect(int(paid.get("mana", 0)) == 2 and int((k_state.call("player", 0) as Dictionary).get("mana", -1)) == 0, "K Strategy normal payment must consume all current mana.")

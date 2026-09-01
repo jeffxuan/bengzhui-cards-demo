@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "characters": [
     {"id":"q","name":"Q","professions":["arcanist","shooter"],"health":7,"stamina":1,"mana":3,"passive":{"id":"q_thunder_blessing","source_text":"新版技能文本见 thunder_guard。"},"skills":[{"id":"q_thunderstorm","name":"雷暴","source_text":"弃置点数和为23的牌，对5x5区域造成3点雷电伤害并麻痹，可改点数摸牌后结束回合。"},{"id":"q_thunder_guard","name":"雷佑","source_text":"摸牌阶段展示牌堆顶6张并按类别获得，攻击牌附加麻痹，奇异牌可转交，防御牌允许回合结束再发动。"}],"provisional":true},
     {"id":"k","name":"K","professions":["arcanist","ambitionist"],"health":7,"stamina":2,"mana":2,"passive":{"id":"k_collapse","source_text":"奇数张奇异牌费用减1，偶数张攻击牌费用加1。"},"skills":[{"id":"k_brain","name":"巨脑","skill_type":"standard","uses_per_turn":1,"source_text":"限一次弃一张牌，依次视为使用递归、回响、祷告；本回合不能造成伤害。"},{"id":"k_strategy","name":"奇策","skill_type":"ability","resource_cost":{"mode":"all_mana"},"exhaust":{"extra_resolution_per_mana":1,"provisional":true},"uses_per_profession_per_match":1,"source_text":"消耗所有法力，将手牌当任意奇异牌使用；每职业每局一次，耗尽可额外结算。"}],"provisional":true},

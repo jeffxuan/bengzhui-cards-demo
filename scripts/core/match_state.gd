@@ -5,7 +5,7 @@ const EventDeckScript = preload("res://scripts/core/event_deck.gd")
 const MatchCommandScript = preload("res://scripts/core/match_command.gd")
 const MatchEventScript = preload("res://scripts/core/match_event.gd")
 const CARDINAL_DIRECTIONS: Array[Vector2i] = [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]
-const TARGET_EFFECTS: Array[String] = ["damage", "heal", "armor", "status", "remove_status", "break_armor", "push", "steal_card", "draw_target"]
+const TARGET_EFFECTS: Array[String] = ["damage", "heal", "armor", "status", "status_if_damage", "remove_status", "break_armor", "push", "steal_card", "draw_target"]
 const NEGATIVE_STATUSES: Array[String] = ["paralyze", "bleed", "poison", "confusion"]
 const REVISED_SKILL_ALIASES: Dictionary = {
 	"q_stargaze": "q_thunder_guard",
@@ -44,6 +44,7 @@ var pending_action: Dictionary = {}
 var pending_event: Dictionary = {}
 var pending_discard: Dictionary = {}
 var pending_skill_discard: Dictionary = {}
+var pending_skill_choice: Dictionary = {}
 var profession_choice_pending: bool = false
 var discard_continuation: Dictionary = {}
 var last_event: Dictionary = {}
@@ -171,6 +172,8 @@ func submit_command(command: Dictionary) -> bool:
 			_handle_discard_cards(payload)
 		MatchCommandScript.SKILL_DISCARD:
 			_handle_skill_discard(payload)
+		MatchCommandScript.SKILL_CHOICE:
+			_handle_skill_choice(payload)
 		MatchCommandScript.SWITCH_PROFESSION:
 			_handle_switch_profession(payload)
 	_settle_eliminations(tiebreak_snapshot)
@@ -184,6 +187,12 @@ func submit_command(command: Dictionary) -> bool:
 func legal_commands(actor_id: int = -1) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	if finished or players.is_empty():
+		return result
+	if not pending_skill_choice.is_empty():
+		var choice_actor: int = int(pending_skill_choice.get("player_id", -1))
+		if actor_id < 0 or actor_id == choice_actor:
+			for option_value: Variant in pending_skill_choice.get("options", []) as Array:
+				result.append(MatchCommandScript.make(MatchCommandScript.SKILL_CHOICE, choice_actor, {"request_id": String(pending_skill_choice.get("request_id", "")), "value": option_value}))
 		return result
 	if not pending_skill_discard.is_empty():
 		var skill_discard_actor: int = int(pending_skill_discard.get("player_id", -1))
@@ -210,6 +219,8 @@ func legal_commands(actor_id: int = -1) -> Array[Dictionary]:
 			options.append("")
 			for profession_value: Variant in options:
 				result.append(MatchCommandScript.make(MatchCommandScript.SWITCH_PROFESSION, active_player_index, {"profession": String(profession_value)}))
+			if String(current_player().get("character_id", "")) == "q":
+				result.append(MatchCommandScript.make(MatchCommandScript.USE_SKILL, active_player_index, {"skill_id": "q_thunder_guard", "target_id": active_player_index, "variant": "normal"}))
 		return result
 	if not pending_action.is_empty():
 		var responder_id: int = int(pending_action.get("responder_id", -1))
@@ -359,6 +370,7 @@ func _handle_skill_discard(payload: Dictionary) -> void:
 	var hand: Array = players[player_id].get("hand", []) as Array
 	var discard: Array = players[player_id].get("discard", []) as Array
 	var discarded: Array[String] = []
+	var skill_id := String(pending_skill_discard.get("skill_id", ""))
 	for card_value: Variant in selected:
 		var card_id := String(card_value)
 		var index := hand.find(card_id)
@@ -369,14 +381,110 @@ func _handle_skill_discard(payload: Dictionary) -> void:
 			_record_discard_origin(player_id, card_id)
 	players[player_id]["hand"] = hand
 	players[player_id]["discard"] = discard
-	var skill_id := String(pending_skill_discard.get("skill_id", ""))
 	var target_id := int(pending_skill_discard.get("target_id", player_id))
 	pending_skill_discard.clear()
+	if skill_id == "ginger_power":
+		var targets := _enemies_in_range(player_id, 1)
+		if targets.is_empty():
+			_emit("skill_resolution_failed", {"player_id": player_id, "skill_id": skill_id, "message": "【强攻】在结算时失去所有合法目标，已结束结算。"})
+			return
+		_request_skill_choice(player_id, "ginger_power_target", skill_id, targets)
+		return
 	_emit("cards_discarded", {"player_id": player_id, "card_ids": discarded, "reason_id": "skill:%s" % skill_id, "message": "%s 为技能【%s】弃置了%d张牌。" % [String(players[player_id].get("name", "")), skill_id, discarded.size()]})
 	_emit("skill_discard_paid", {"player_id": player_id, "skill_id": skill_id, "card_ids": discarded, "message": "%s 已支付技能【%s】的弃牌条件。" % [String(players[player_id].get("name", "")), skill_id]})
 	var skill: Dictionary = _skill_definition(player_id, skill_id)
 	var action: Dictionary = {"source_id": player_id, "target_id": target_id, "definition": skill.duplicate(true), "category": "skill", "card_id": "", "damage_bonus": 0, "unanswerable": true}
 	_resolve_action(action)
+	if skill_id == "q_thunderstorm" and bool(players[player_id].get("alive", false)):
+		_request_skill_choice(player_id, "q_thunderstorm_rank", skill_id, range(1, 14))
+
+
+func _request_skill_choice(player_id: int, kind: String, skill_id: String, options: Array, extra: Dictionary = {}) -> void:
+	pending_skill_choice = {"request_id": "%d:%d:%s" % [command_log.size(), player_id, kind], "player_id": player_id, "kind": kind, "skill_id": skill_id, "options": options.duplicate(true)}
+	for key: Variant in extra:
+		pending_skill_choice[String(key)] = extra[key]
+	_emit("skill_choice_requested", {"player_id": player_id, "skill_id": skill_id, "kind": kind, "message": "%s 等待技能选择。" % String(players[player_id].get("name", ""))})
+
+
+func _handle_skill_choice(payload: Dictionary) -> void:
+	var request := pending_skill_choice.duplicate(true)
+	pending_skill_choice.clear()
+	var player_id := int(request.get("player_id", -1))
+	var kind := String(request.get("kind", ""))
+	var value: Variant = payload.get("value")
+	match kind:
+		"q_thunderstorm_rank":
+			players[player_id]["thunderstorm_rank"] = int(value)
+			_draw_cards(player_id, int(value))
+			_emit("skill_choice_resolved", {"player_id": player_id, "skill_id": "q_thunderstorm", "rank": int(value), "message": "【雷暴】点数改为%d，摸%d张牌并结束回合。" % [int(value), int(value)]})
+			_handle_end_turn()
+		"q_thunder_guard_category":
+			_resolve_q_thunder_guard_category(player_id, String(value), request)
+		"q_thunder_guard_transfer":
+			var card_id := String(request.get("card_id", ""))
+			var source_discard: Array = players[player_id].get("discard", []) as Array
+			if _remove_first(source_discard, card_id):
+				var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
+				var origin_key := "profession_discard" if String(definition.get("profession", "neutral")) != "neutral" and String(definition.get("category", "")) != "equipment" else "common_discard"
+				_remove_first(players[player_id].get(origin_key, []) as Array, card_id)
+				(players[int(value)].get("hand", []) as Array).append(card_id)
+				_emit("card_transferred", {"player_id": player_id, "target_id": int(value), "card_id": card_id, "message": "Q 将【%s】交给%s。" % [String(definition.get("name", card_id)), String(players[int(value)].get("name", ""))]})
+		"q_thunder_guard_end_decision":
+			if String(value) == "use":
+				_begin_q_thunder_guard(player_id)
+			else:
+				_finish_end_turn(player_id)
+		"k_strategy_card":
+			var definition: Dictionary = catalog.call("resolve_card", String(value)) as Dictionary
+			_request_skill_choice(player_id, "k_strategy_target", "k_strategy", _skill_target_options(player_id, definition), {"card_id": String(value), "resolution_count": int(request.get("resolution_count", 1))})
+		"k_strategy_target":
+			_resolve_k_strategy(player_id, String(request.get("card_id", "")), int(value), int(request.get("resolution_count", 1)))
+		"ginger_power_target":
+			_resolve_ginger_power(player_id, int(value))
+		"ginger_power_max_health":
+			if String(value) == "reduce":
+				var active: Dictionary = players[player_id]
+				active["max_health"] = maxi(1, int(active.get("max_health", 1)) - 1)
+				active["health"] = mini(int(active.get("health", 0)), int(active.get("max_health", 1)))
+				players[player_id] = active
+			_request_ginger_power_cards(player_id)
+		"ginger_power_reward":
+			if String(value) == "heal":
+				_heal(player_id, 1)
+			else:
+				_draw_cards(player_id, 1)
+
+
+func _skill_target_options(player_id: int, definition: Dictionary) -> Array:
+	if String(definition.get("target", "self")) == "self":
+		return [player_id]
+	if String(definition.get("target", "self")) == "all_enemies_in_range":
+		return [-1] if not _enemies_in_range(player_id, _definition_range(player_id, definition)).is_empty() else []
+	return _enemies_in_range(player_id, _definition_range(player_id, definition))
+
+
+func _resolve_k_strategy(player_id: int, card_id: String, target_id: int, resolution_count: int) -> void:
+	var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
+	if definition.is_empty():
+		return
+	definition["cost"] = {"stamina": 0, "mana": 0}
+	var profession := String(definition.get("profession", "neutral"))
+	var uses: Dictionary = players[player_id].get("skill_match_uses", {}) as Dictionary
+	uses["k_strategy:%s" % profession] = 1
+	players[player_id]["skill_match_uses"] = uses
+	_emit("skill_choice_resolved", {"player_id": player_id, "skill_id": "k_strategy", "card_id": card_id, "resolution_count": resolution_count, "message": "【奇策】将整手牌视为【%s】，结算%d次。" % [String(definition.get("name", card_id)), resolution_count]})
+	for _index: int in resolution_count:
+		_apply_effects(player_id, target_id, definition.get("effects", []) as Array, "奇异", 0, _definition_range(player_id, definition), 0, target_id < 0)
+		if not pending_discard.is_empty() or not bool(players[player_id].get("alive", false)):
+			break
+
+
+func _resolve_ginger_power(player_id: int, target_id: int) -> void:
+	var definition: Dictionary = catalog.call("resolve_card", "berserker_charge_new#001") as Dictionary
+	var before := int(players[target_id].get("health", 0))
+	_apply_effects(player_id, target_id, definition.get("effects", []) as Array, "attack", 0, 1)
+	if before > int(players[target_id].get("health", 0)) and bool(players[player_id].get("alive", false)):
+		_request_skill_choice(player_id, "ginger_power_reward", "ginger_power", ["heal", "draw"])
 
 
 func replay_document() -> Dictionary:
@@ -441,6 +549,7 @@ func deterministic_snapshot() -> Dictionary:
 		"win_reason_id": win_reason_id,
 		"pending_discard": pending_discard.duplicate(true),
 		"pending_skill_discard": pending_skill_discard.duplicate(true),
+		"pending_skill_choice": pending_skill_choice.duplicate(true),
 		"pending_action": pending_action.duplicate(true),
 		"pending_event": pending_event.duplicate(true),
 		"profession_choice_pending": profession_choice_pending,
@@ -481,11 +590,22 @@ func _validate_command(command: Dictionary) -> String:
 		if String(skill_payload.get("request_id", "")) != String(pending_skill_discard.get("request_id", "")):
 			return "技能弃牌请求已经失效。"
 		return _validate_skill_discard_selection(actor_id, skill_payload.get("card_ids", []) as Array)
+	if not pending_skill_choice.is_empty():
+		if String(command.get("type", "")) != MatchCommandScript.SKILL_CHOICE or actor_id != int(pending_skill_choice.get("player_id", -1)):
+			return "请先完成技能选择。"
+		var choice_payload: Dictionary = command.get("payload", {}) as Dictionary
+		if String(choice_payload.get("request_id", "")) != String(pending_skill_choice.get("request_id", "")):
+			return "技能选择请求已经失效。"
+		if not (pending_skill_choice.get("options", []) as Array).has(choice_payload.get("value")):
+			return "该技能选择不合法。"
+		return ""
 	if not pending_discard.is_empty():
 		if String(command.get("type", "")) != MatchCommandScript.DISCARD_CARDS or actor_id != int(pending_discard.get("player_id", -1)):
 			return "请先完成弃牌选择。"
 		return _validate_discard_payload(command.get("payload", {}) as Dictionary)
 	if profession_choice_pending:
+		if String(command.get("type", "")) == MatchCommandScript.USE_SKILL and actor_id == active_player_index and String((command.get("payload", {}) as Dictionary).get("skill_id", "")) == "q_thunder_guard":
+			return ""
 		if String(command.get("type", "")) != MatchCommandScript.SWITCH_PROFESSION or actor_id != active_player_index:
 			return "请先选择本回合职业。"
 		var selected_profession: String = String((command.get("payload", {}) as Dictionary).get("profession", ""))
@@ -554,6 +674,7 @@ func _create_players(roster: Array[String]) -> void:
 			"skills_used": {},
 			"skill_uses": {},
 			"skill_match_uses": {},
+			"turn_category_uses": {},
 			"turn_healing": 0,
 			"turn_eliminations": 0,
 			"active_breakthroughs": {},
@@ -653,6 +774,82 @@ func _handle_switch_profession(payload: Dictionary) -> void:
 	_emit("turn_started", {"player_id": active_player_index, "message": "%s 开始回合。" % String(active.get("name", ""))})
 
 
+func _begin_q_thunder_guard(player_id: int) -> void:
+	var active: Dictionary = players[player_id]
+	var revealed: Array[Dictionary] = []
+	var common_deck: Array[String] = _string_array(active.get("common_deck", []))
+	var profession_deck: Array[String] = _string_array(active.get("profession_deck", []))
+	var common_discard: Array[String] = _string_array(active.get("common_discard", []))
+	var profession_discard: Array[String] = _string_array(active.get("profession_discard", []))
+	for _index: int in 6:
+		if common_deck.is_empty() and not common_discard.is_empty():
+			common_deck = common_discard.duplicate()
+			common_discard.clear()
+			_shuffle_strings(common_deck)
+		if profession_deck.is_empty() and not profession_discard.is_empty():
+			profession_deck = profession_discard.duplicate()
+			profession_discard.clear()
+			_shuffle_strings(profession_deck)
+		var use_profession := not profession_deck.is_empty() and (common_deck.is_empty() or rng.randi_range(0, 1) == 1)
+		if use_profession:
+			revealed.append({"card_id": profession_deck.pop_back(), "deck": "profession"})
+		elif not common_deck.is_empty():
+			revealed.append({"card_id": common_deck.pop_back(), "deck": "common"})
+		else:
+			break
+	active["common_deck"] = common_deck
+	active["profession_deck"] = profession_deck
+	active["common_discard"] = common_discard
+	active["profession_discard"] = profession_discard
+	players[player_id] = active
+	var categories: Array[String] = []
+	for entry: Dictionary in revealed:
+		var category := String((catalog.call("resolve_card", String(entry.get("card_id", ""))) as Dictionary).get("category", ""))
+		if not category.is_empty() and not categories.has(category):
+			categories.append(category)
+	if categories.is_empty():
+		categories.append("none")
+	_request_skill_choice(player_id, "q_thunder_guard_category", "q_thunder_guard", categories, {"revealed": revealed})
+	_emit("cards_revealed", {"player_id": player_id, "skill_id": "q_thunder_guard", "cards": revealed.duplicate(true), "message": "Q 展示牌堆顶%d张牌。" % revealed.size()})
+
+
+func _resolve_q_thunder_guard_category(player_id: int, category: String, request: Dictionary) -> void:
+	var active: Dictionary = players[player_id]
+	var hand: Array = active.get("hand", []) as Array
+	var common_return: Array[String] = []
+	var profession_return: Array[String] = []
+	var attack_marks: Dictionary = active.get("thunder_guard_attack_cards", {}) as Dictionary
+	var strange_marks: Dictionary = active.get("thunder_guard_strange_cards", {}) as Dictionary
+	for entry_value: Variant in request.get("revealed", []) as Array:
+		var entry: Dictionary = entry_value as Dictionary
+		var card_id := String(entry.get("card_id", ""))
+		var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
+		if String(definition.get("category", "")) == category:
+			hand.append(card_id)
+			if category == "attack":
+				attack_marks[card_id] = true
+			elif category == "奇异":
+				strange_marks[card_id] = true
+		elif String(entry.get("deck", "")) == "profession":
+			profession_return.append(card_id)
+		else:
+			common_return.append(card_id)
+	# Cards were drawn from the end. Re-appending in reverse restores their exact original order.
+	for index: int in range(common_return.size() - 1, -1, -1):
+		(active.get("common_deck", []) as Array).append(common_return[index])
+	for index: int in range(profession_return.size() - 1, -1, -1):
+		(active.get("profession_deck", []) as Array).append(profession_return[index])
+	active["hand"] = hand
+	active["thunder_guard_attack_cards"] = attack_marks
+	active["thunder_guard_strange_cards"] = strange_marks
+	if category == "defense":
+		active["q_thunder_guard_end_available"] = true
+	players[player_id] = active
+	profession_choice_pending = false
+	_emit("skill_choice_resolved", {"player_id": player_id, "skill_id": "q_thunder_guard", "category": category, "message": "Q 获得展示牌中的全部%s牌，其余牌按原顺序放回。" % category})
+	_emit("turn_started", {"player_id": player_id, "message": "%s 开始回合。" % String(active.get("name", ""))})
+
+
 func _tick_start_statuses(player_id: int) -> void:
 	var target: Dictionary = players[player_id]
 	var statuses: Dictionary = target.get("statuses", {}) as Dictionary
@@ -730,6 +927,10 @@ func _legal_skill_commands(actor_id: int) -> Array[Dictionary]:
 		if skill.is_empty() or not bool(skill.get("executable", true)):
 			continue
 		var skill_id: String = String(skill.get("id", ""))
+		if skill_id == "k_strategy" and (_available_k_strategy_cards(actor_id).is_empty() or (players[actor_id].get("hand", []) as Array).is_empty()):
+			continue
+		if skill_id == "ginger_power" and _enemies_in_range(actor_id, 1).is_empty():
+			continue
 		var policy := skill_usage_policy(actor_id, skill_id)
 		var uses_per_turn := int(policy.get("uses_per_turn", skill.get("uses_per_turn", 0)))
 		var skill_uses := int((players[actor_id].get("skill_uses", {}) as Dictionary).get(skill_id, 0))
@@ -939,6 +1140,17 @@ func _handle_play_card(payload: Dictionary) -> void:
 	var target_id: int = int(payload.get("target_id", actor_id))
 	var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
 	var active: Dictionary = players[actor_id]
+	var thunder_guard_attacks: Dictionary = active.get("thunder_guard_attack_cards", {}) as Dictionary
+	var thunder_guard_strange: Dictionary = active.get("thunder_guard_strange_cards", {}) as Dictionary
+	if bool(thunder_guard_attacks.get(card_id, false)):
+		definition = definition.duplicate(true)
+		(definition.get("effects", []) as Array).append({"op": "status_if_damage", "status": "paralyze", "stacks": 1})
+		thunder_guard_attacks.erase(card_id)
+		active["thunder_guard_attack_cards"] = thunder_guard_attacks
+	var can_transfer_after := bool(thunder_guard_strange.get(card_id, false))
+	if can_transfer_after:
+		thunder_guard_strange.erase(card_id)
+		active["thunder_guard_strange_cards"] = thunder_guard_strange
 	if not _remove_first(active.get("hand", []) as Array, card_id):
 		_remove_first(active.get("purchased_hand", []) as Array, card_id)
 	_pay_cost(actor_id, definition)
@@ -978,6 +1190,8 @@ func _handle_play_card(payload: Dictionary) -> void:
 		"damage_bonus": damage_bonus,
 		"unanswerable": unanswerable
 	}
+	if can_transfer_after:
+		action["q_transfer_card"] = card_id
 	_emit("card_played", {"player_id": actor_id, "target_id": target_id, "card_id": card_id, "message": "%s 使用【%s】。" % [String(active.get("name", "")), String(definition.get("name", card_id))]})
 	_record_public_card(actor_id, card_id, target_id, "card")
 	_open_response_or_resolve(action)
@@ -989,12 +1203,19 @@ func _handle_use_skill(payload: Dictionary) -> void:
 	var variant: String = String(payload.get("variant", "normal"))
 	var target_id: int = int(payload.get("target_id", actor_id))
 	var skill: Dictionary = _skill_definition(actor_id, skill_id)
+	var revised_skill_id := String(skill.get("revised_skill_id", REVISED_SKILL_ALIASES.get(skill_id, skill_id)))
+	if revised_skill_id == "q_thunder_guard":
+		_begin_q_thunder_guard(actor_id)
+		return
+	if revised_skill_id == "ginger_power":
+		_begin_ginger_power(actor_id, skill, variant)
+		return
 	var paid_resources := _pay_skill_resources(actor_id, skill, variant)
 	var skill_uses: Dictionary = players[actor_id].get("skill_uses", {}) as Dictionary
 	skill_uses[skill_id] = int(skill_uses.get(skill_id, 0)) + 1
 	players[actor_id]["skill_uses"] = skill_uses
 	var policy := skill_usage_policy(actor_id, skill_id)
-	if int(policy.get("uses_per_profession_per_match", 0)) > 0:
+	if int(policy.get("uses_per_profession_per_match", 0)) > 0 and skill_id != "k_strategy":
 		var match_uses: Dictionary = players[actor_id].get("skill_match_uses", {}) as Dictionary
 		var match_key := _skill_match_usage_key(actor_id, skill_id)
 		match_uses[match_key] = int(match_uses.get(match_key, 0)) + 1
@@ -1018,6 +1239,13 @@ func _handle_use_skill(payload: Dictionary) -> void:
 		var requirement_text := "恰好%d张" % int(pending_skill_discard["required_count"]) if selection_mode == "count" else "点数和为%d" % int(pending_skill_discard["required_rank_sum"])
 		_emit("discard_requested", {"player_id": actor_id, "request_id": pending_skill_discard["request_id"], "selection_mode": selection_mode, "required_rank_sum": pending_skill_discard["required_rank_sum"], "minimum_count": pending_skill_discard["minimum_count"], "required_count": pending_skill_discard["required_count"], "reason_id": "skill:%s" % skill_id, "message": "%s 请选择%s的牌发动【%s】。" % [String(players[actor_id].get("name", "")), requirement_text, String(skill.get("name", skill_id))]})
 		return
+	if revised_skill_id == "k_strategy":
+		var strange_cards := _available_k_strategy_cards(actor_id)
+		var repeat_count := maxi(1, (players[actor_id].get("hand", []) as Array).size())
+		if variant == "exhaust":
+			repeat_count += int(paid_resources.get("mana", 0))
+		_request_skill_choice(actor_id, "k_strategy_card", "k_strategy", strange_cards, {"resolution_count": repeat_count})
+		return
 	var active: Dictionary = players[actor_id]
 	active = players[actor_id]
 	players[actor_id] = active
@@ -1032,6 +1260,49 @@ func _handle_use_skill(payload: Dictionary) -> void:
 	}
 	_emit("skill_used", {"player_id": actor_id, "target_id": target_id, "skill_id": skill_id, "variant": variant, "paid_resources": paid_resources, "message": "%s 发动【%s】。" % [String(active.get("name", "")), String(skill.get("name", skill_id))]})
 	_open_response_or_resolve(action)
+
+
+func _begin_ginger_power(player_id: int, skill: Dictionary, variant: String) -> void:
+	var active: Dictionary = players[player_id]
+	var before_health := int(active.get("health", 0))
+	var loss := maxi(0, before_health - 2)
+	active["health"] = 2
+	var breakthroughs: Dictionary = active.get("active_breakthroughs", {}) as Dictionary
+	breakthroughs["ginger_power"] = true
+	active["active_breakthroughs"] = breakthroughs
+	var losses: Dictionary = active.get("breakthrough_losses", {}) as Dictionary
+	losses["ginger_power"] = {"health": loss}
+	active["breakthrough_losses"] = losses
+	var uses: Dictionary = active.get("skill_uses", {}) as Dictionary
+	uses["ginger_power"] = int(uses.get("ginger_power", 0)) + 1
+	active["skill_uses"] = uses
+	players[player_id] = active
+	_draw_cards(player_id, 2)
+	_emit("skill_used", {"player_id": player_id, "skill_id": "ginger_power", "message": "%s 发动【强攻】，生命调整至2并摸两张牌。" % String(active.get("name", ""))})
+	_request_skill_choice(player_id, "ginger_power_max_health", "ginger_power", ["keep", "reduce"])
+
+
+func _request_ginger_power_cards(player_id: int) -> void:
+	pending_skill_discard = {"request_id": "%d:%d:ginger_power" % [command_log.size(), player_id], "player_id": player_id, "skill_id": "ginger_power", "target_id": player_id, "variant": "normal", "selection_mode": "count", "required_rank_sum": 0, "minimum_count": 2, "required_count": 2}
+	_emit("discard_requested", {"player_id": player_id, "request_id": pending_skill_discard["request_id"], "selection_mode": "count", "required_count": 2, "reason_id": "skill:ginger_power", "message": "请选择两张手牌作为【舍身突击】并弃置。"})
+
+
+func _available_k_strategy_cards(player_id: int) -> Array[String]:
+	var result: Array[String] = []
+	var used: Dictionary = players[player_id].get("skill_match_uses", {}) as Dictionary
+	for definition_value: Variant in catalog.get("staged_cards") as Array:
+		var definition: Dictionary = definition_value as Dictionary
+		if String(definition.get("category", "")) != "奇异":
+			continue
+		var profession := String(definition.get("profession", "neutral"))
+		if int(used.get("k_strategy:%s" % profession, 0)) > 0:
+			continue
+		var instances: Array = definition.get("instances", []) as Array
+		if not instances.is_empty():
+			var instance_id := "%s#001" % String(definition.get("id", ""))
+			if not _skill_target_options(player_id, catalog.call("resolve_card", instance_id) as Dictionary).is_empty():
+				result.append(instance_id)
+	return result
 
 
 func _open_response_or_resolve(action: Dictionary) -> void:
@@ -1132,6 +1403,11 @@ func _handle_end_turn() -> void:
 	if not bool(active.get("alive", false)):
 		_finish_end_turn(ending_id)
 		return
+	if bool(active.get("q_thunder_guard_end_available", false)):
+		active["q_thunder_guard_end_available"] = false
+		players[ending_id] = active
+		_request_skill_choice(ending_id, "q_thunder_guard_end_decision", "q_thunder_guard", ["use", "skip"])
+		return
 	var hand_limit_for_turn: int = maxi(1, int(active.get("health", 0)) - 2)
 	var excess: int = (active.get("hand", []) as Array).size() - hand_limit_for_turn
 	if excess > 0:
@@ -1142,6 +1418,11 @@ func _handle_end_turn() -> void:
 
 func _finish_end_turn(ending_id: int) -> void:
 	var active: Dictionary = players[ending_id]
+	if bool(active.get("q_thunder_guard_end_available", false)):
+		active["q_thunder_guard_end_available"] = false
+		players[ending_id] = active
+		_request_skill_choice(ending_id, "q_thunder_guard_end_decision", "q_thunder_guard", ["use", "skip"])
+		return
 	var status_rounds: Dictionary = active.get("status_rounds", {}) as Dictionary
 	var statuses: Dictionary = active.get("statuses", {}) as Dictionary
 	if int(statuses.get("hidden", 0)) > 0 and int(status_rounds.get("hidden", completed_rounds)) < completed_rounds:
@@ -1200,6 +1481,14 @@ func _resolve_action(action: Dictionary) -> void:
 		var source: Dictionary = players[source_id]
 		source["last_card_id"] = card_id
 		players[source_id] = source
+	var transfer_card := String(action.get("q_transfer_card", ""))
+	if not transfer_card.is_empty() and bool(players[source_id].get("alive", false)):
+		var recipients: Array[int] = []
+		for candidate_id: int in players.size():
+			if candidate_id != source_id and bool(players[candidate_id].get("alive", false)):
+				recipients.append(candidate_id)
+		if not recipients.is_empty():
+			_request_skill_choice(source_id, "q_thunder_guard_transfer", "q_thunder_guard", recipients, {"card_id": transfer_card})
 
 
 func _apply_effects(source_id: int, target_id: int, effects: Array, category: String, damage_bonus: int, range_limit: int, pressure_bonus: int = 0, area_action: bool = false) -> void:
@@ -1252,7 +1541,10 @@ func _apply_single_effect(source_id: int, target_id: int, effect: Dictionary, ca
 	var amount: int = int(effect.get("amount", 0))
 	match operation:
 		"damage":
-			_deal_damage(target_id, maxi(0, amount + damage_bonus), String(effect.get("kind", "normal")), source_id, category == "attack", damage_context)
+			damage_context["last_damage"] = _deal_damage(target_id, maxi(0, amount + damage_bonus), String(effect.get("kind", "normal")), source_id, category == "attack", damage_context)
+		"status_if_damage":
+			if int(damage_context.get("last_damage", 0)) > 0:
+				_apply_status(target_id, String(effect.get("status", "")), int(effect.get("stacks", 1)), source_id)
 		"self_damage":
 			_deal_damage(source_id, amount, String(effect.get("kind", "true")), source_id, false)
 		"heal":
@@ -1449,6 +1741,15 @@ func _effective_cost(player_id: int, definition: Dictionary) -> Dictionary:
 	var stamina: int = int(base_cost.get("stamina", 0))
 	var mana: int = int(base_cost.get("mana", 0))
 	var player_state: Dictionary = players[player_id]
+	if String(player_state.get("character_id", "")) == "k":
+		var category_uses: Dictionary = player_state.get("turn_category_uses", {}) as Dictionary
+		var category := String(definition.get("category", ""))
+		var next_use := int(category_uses.get(category, 0)) + 1
+		if category == "奇异" and next_use % 2 == 1:
+			stamina = maxi(0, stamina - 1)
+			mana = maxi(0, mana - 1)
+		elif category == "attack" and next_use % 2 == 0:
+			stamina += 1
 	var modifiers: Dictionary = player_state.get("modifiers", {}) as Dictionary
 	if int(modifiers.get("free_cast", 0)) > 0:
 		return {"stamina": 0, "mana": 0}
@@ -1473,6 +1774,13 @@ func _pay_cost(player_id: int, definition: Dictionary) -> void:
 		flags["spell_discount_used"] = true
 		player_state["flags"] = flags
 	players[player_id] = player_state
+	if String(player_state.get("character_id", "")) == "k":
+		var category := String(definition.get("category", ""))
+		if category == "奇异" or category == "attack":
+			var category_uses: Dictionary = player_state.get("turn_category_uses", {}) as Dictionary
+			category_uses[category] = int(category_uses.get(category, 0)) + 1
+			player_state["turn_category_uses"] = category_uses
+			players[player_id] = player_state
 
 
 func _definition_range(player_id: int, definition: Dictionary) -> int:
@@ -1653,6 +1961,29 @@ func _heal(player_id: int, amount: int) -> void:
 			target["turn_healing"] = int(target.get("turn_healing", 0)) + restored
 			players[player_id] = target
 		_emit("healed", {"player_id": player_id, "amount": restored, "message": "%s 回复%d点生命。" % [String(target.get("name", "")), restored]})
+		_check_ginger_breakthrough(player_id)
+
+
+func _check_ginger_breakthrough(player_id: int) -> void:
+	if player_id != active_player_index or String(players[player_id].get("character_id", "")) != "ginger":
+		return
+	var active: Dictionary = players[player_id]
+	var breakthroughs: Dictionary = active.get("active_breakthroughs", {}) as Dictionary
+	if not bool(breakthroughs.get("ginger_power", false)):
+		return
+	if int(active.get("turn_healing", 0)) < 3 and int(active.get("turn_eliminations", 0)) < 2:
+		return
+	var losses: Dictionary = active.get("breakthrough_losses", {}) as Dictionary
+	var loss: Dictionary = losses.get("ginger_power", {}) as Dictionary
+	var restored := int(loss.get("health", 0))
+	breakthroughs.erase("ginger_power")
+	losses.erase("ginger_power")
+	active["active_breakthroughs"] = breakthroughs
+	active["breakthrough_losses"] = losses
+	players[player_id] = active
+	if restored > 0:
+		_heal(player_id, restored)
+	_emit("breakthrough_completed", {"player_id": player_id, "skill_id": "ginger_power", "health_restored": restored, "message": "Ginger 达成【强攻】破围，回复该技能代价失去的生命。"})
 
 
 func _gain_armor(player_id: int, amount: int) -> void:
@@ -1947,6 +2278,10 @@ func _settle_eliminations(initial_snapshot: Array[Dictionary]) -> void:
 		var pending_skill_player_id: int = int(pending_skill_discard.get("player_id", -1))
 		if pending_skill_player_id >= 0 and not bool(players[pending_skill_player_id].get("alive", false)):
 			pending_skill_discard.clear()
+	if not pending_skill_choice.is_empty():
+		var pending_choice_player_id: int = int(pending_skill_choice.get("player_id", -1))
+		if pending_choice_player_id >= 0 and not bool(players[pending_choice_player_id].get("alive", false)):
+			pending_skill_choice.clear()
 	var initial_candidate_ids: Array[int] = []
 	for candidate: Dictionary in initial_snapshot:
 		initial_candidate_ids.append(int(candidate.get("id", -1)))
@@ -2097,7 +2432,23 @@ func _skill_definition(player_id: int, skill_id: String) -> Dictionary:
 				{"op": "turn_flag", "flag": "cannot_deal_damage", "value": true}
 			]
 			return brain
-		if revised_skill_id == "k_strategy" or revised_skill_id == "ginger_waist" or revised_skill_id == "ginger_power":
+		if revised_skill_id == "k_strategy":
+			var strategy := revised_skill.duplicate(true)
+			strategy["id"] = skill_id
+			strategy["category"] = "skill"
+			strategy["target"] = "self"
+			strategy["range"] = 0
+			strategy["effects"] = []
+			return strategy
+		if revised_skill_id == "ginger_power":
+			var power := revised_skill.duplicate(true)
+			power["id"] = skill_id
+			power["category"] = "skill"
+			power["target"] = "self"
+			power["range"] = 0
+			power["effects"] = []
+			return power
+		if revised_skill_id == "ginger_waist":
 			return {}
 	var character_definition: Dictionary = catalog.call("character", String(players[player_id].get("character_id", ""))) as Dictionary
 	for skill_value: Variant in character_definition.get("skills", []) as Array:
@@ -2107,6 +2458,15 @@ func _skill_definition(player_id: int, skill_id: String) -> Dictionary:
 			return skill
 	if skill_id == "q_thunderstorm" and character_id == "q":
 		return catalog.call("executable_staged_skill", "q", skill_id) as Dictionary
+	if skill_id == "q_thunder_guard" and character_id == "q":
+		var guard: Dictionary = catalog.call("staged_skill", "q", skill_id) as Dictionary
+		guard["id"] = skill_id
+		guard["category"] = "skill"
+		guard["target"] = "self"
+		guard["range"] = 0
+		guard["cost"] = {"stamina": 0, "mana": 0}
+		guard["effects"] = []
+		return guard
 	return {}
 
 

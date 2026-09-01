@@ -97,10 +97,13 @@ func _run_export_smoke() -> void:
 		var pending_action: Dictionary = smoke_state.get("pending_action") as Dictionary
 		var pending_discard: Dictionary = smoke_state.get("pending_discard") as Dictionary
 		var pending_skill_discard: Dictionary = smoke_state.get("pending_skill_discard") as Dictionary
+		var pending_skill_choice: Dictionary = smoke_state.get("pending_skill_choice") as Dictionary
 		if not pending_discard.is_empty():
 			actor_id = int(pending_discard.get("player_id", -1))
 		elif not pending_skill_discard.is_empty():
 			actor_id = int(pending_skill_discard.get("player_id", -1))
+		elif not pending_skill_choice.is_empty():
+			actor_id = int(pending_skill_choice.get("player_id", -1))
 		elif pending_action.is_empty():
 			actor_id = int((smoke_state.call("current_player") as Dictionary).get("id", -1))
 		else:
@@ -613,6 +616,12 @@ func _refresh_skills() -> void:
 		keep.text = "保持%s" % _profession_name(String(human.get("profession", "")))
 		keep.pressed.connect(_submit_profession_choice.bind(""))
 		skill_box.add_child(keep)
+		if String(human.get("character_id", "")) == "q":
+			var thunder_guard := Button.new()
+			thunder_guard.text = "发动雷佑（替代本回合摸牌）"
+			thunder_guard.tooltip_text = "展示牌堆顶6张，获得其中一种类别的全部牌；其余牌按原顺序放回。"
+			thunder_guard.pressed.connect(_select_skill.bind("q_thunder_guard"))
+			skill_box.add_child(thunder_guard)
 		if first_choice == null:
 			first_choice = keep
 		first_choice.grab_focus.call_deferred()
@@ -869,6 +878,9 @@ func _required_actor_id() -> int:
 	var pending_skill_discard: Dictionary = state.get("pending_skill_discard") as Dictionary
 	if not pending_skill_discard.is_empty():
 		return int(pending_skill_discard.get("player_id", -1))
+	var pending_skill_choice: Dictionary = state.get("pending_skill_choice") as Dictionary
+	if not pending_skill_choice.is_empty():
+		return int(pending_skill_choice.get("player_id", -1))
 	return int((state.call("current_player") as Dictionary).get("id", -1))
 
 
@@ -906,6 +918,29 @@ func _refresh_blocking_modal() -> void:
 	_clear_children(modal_actions)
 	var pending_discard: Dictionary = state.get("pending_discard") as Dictionary
 	var pending_skill_discard: Dictionary = state.get("pending_skill_discard") as Dictionary
+	var pending_skill_choice: Dictionary = state.get("pending_skill_choice") as Dictionary
+	if not pending_skill_choice.is_empty() and _required_actor_id() == 0:
+		modal_layer.visible = true
+		var skill_id := String(pending_skill_choice.get("skill_id", ""))
+		var kind := String(pending_skill_choice.get("kind", ""))
+		modal_title.text = "技能选择"
+		modal_description.text = "【%s】%s" % [skill_id, {"q_thunder_guard_category": "选择获得的牌类别", "q_thunderstorm_rank": "选择新的点数", "k_strategy_card": "选择视为使用的奇异牌", "k_strategy_target": "选择目标", "ginger_power_target": "选择舍身突击目标", "ginger_power_reward": "选择追加效果"}.get(kind, "请选择")]
+		for command: Dictionary in state.call("legal_commands", 0) as Array[Dictionary]:
+			var value: Variant = (command.get("payload", {}) as Dictionary).get("value")
+			var label := String(value)
+			if kind == "k_strategy_card":
+				label = String((catalog.call("resolve_card", String(value)) as Dictionary).get("name", value))
+			elif kind.ends_with("target") and int(value) >= 0:
+				label = String((state.call("player", int(value)) as Dictionary).get("name", value))
+			elif kind == "ginger_power_reward":
+				label = "回复1点生命" if String(value) == "heal" else "摸1张牌"
+			elif kind == "q_thunder_guard_end_decision":
+				label = "再次发动雷佑" if String(value) == "use" else "结束回合"
+			var button := Button.new()
+			button.text = label
+			button.pressed.connect(_submit_human_command.bind(command))
+			modal_actions.add_child(button)
+		return
 	if not pending_skill_discard.is_empty() and _required_actor_id() == 0:
 		modal_layer.visible = true
 		var selection_mode := String(pending_skill_discard.get("selection_mode", "rank_sum"))

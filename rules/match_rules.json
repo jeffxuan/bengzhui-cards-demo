@@ -1,5 +1,5 @@
 {
-  "version": 7,
+  "version": 8,
   "board_size": 15,
   "collapse_mode": "elimination",
   "collapse_sizes": [15, 11, 7],

@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "cards": [
     {"id":"slash_new","name":"斩击","category":"attack","profession":"neutral","cost":{"stamina":1,"mana":0},"source_text":"对一名敌人造成1点伤害。","instances":[{"suit":"spades","rank":1},{"suit":"spades","rank":2},{"suit":"spades","rank":3},{"suit":"hearts","rank":1},{"suit":"hearts","rank":2},{"suit":"hearts","rank":3},{"suit":"clubs","rank":1},{"suit":"clubs","rank":2},{"suit":"clubs","rank":3},{"suit":"diamonds","rank":1},{"suit":"diamonds","rank":2},{"suit":"diamonds","rank":3}],"effects":[{"op":"damage","amount":1,"kind":"normal"}],"provisional":true},
     {"id":"crossfire_new","name":"交锋","category":"attack","profession":"neutral","cost":{"stamina":1,"mana":0},"source_text":"双方同时弃置攻击牌，按攻击力比较并造成伤害。","instances":[{"suit":"clubs","rank":5},{"suit":"clubs","rank":7},{"suit":"clubs","rank":10}],"effects":[{"op":"provisional","text":"双方弃置攻击牌并比较攻击力。"}],"provisional":true},

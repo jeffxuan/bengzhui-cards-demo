@@ -44,10 +44,13 @@ func _init() -> void:
 			var pending_action: Dictionary = state.get("pending_action") as Dictionary
 			var pending_discard: Dictionary = state.get("pending_discard") as Dictionary
 			var pending_skill_discard: Dictionary = state.get("pending_skill_discard") as Dictionary
+			var pending_skill_choice: Dictionary = state.get("pending_skill_choice") as Dictionary
 			if not pending_discard.is_empty():
 				actor_id = int(pending_discard.get("player_id", -1))
 			elif not pending_skill_discard.is_empty():
 				actor_id = int(pending_skill_discard.get("player_id", -1))
+			elif not pending_skill_choice.is_empty():
+				actor_id = int(pending_skill_choice.get("player_id", -1))
 			elif not pending_action.is_empty():
 				actor_id = int(pending_action.get("responder_id", -1))
 			else:

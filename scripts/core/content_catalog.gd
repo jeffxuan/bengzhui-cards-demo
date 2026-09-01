@@ -21,6 +21,11 @@ const SUIT_IDS: Array[String] = ["none", "hearts", "diamonds", "clubs", "spades"
 const COLOR_IDS: Array[String] = ["none", "red", "black"]
 const RANK_MIN := 0
 const RANK_MAX := 13
+const EQUIPMENT_COSTS: Dictionary = {
+	"weapon": {"stamina": 1, "mana": 0},
+	"armor": {"stamina": 1, "mana": 0},
+	"accessory": {"stamina": 0, "mana": 1}
+}
 
 var version: int = 1
 var cards: Array[Dictionary] = []
@@ -73,7 +78,12 @@ func logical_card_id(value: String) -> String:
 	if cards_by_id.has(value):
 		return value
 	var instance: Dictionary = card_instance(value)
-	return String(instance.get("card_id", ""))
+	if not instance.is_empty():
+		return String(instance.get("card_id", ""))
+	var separator := value.rfind("#")
+	if separator >= 0:
+		return value.substr(0, separator)
+	return ""
 
 
 func character(character_id: String) -> Dictionary:
@@ -302,10 +312,11 @@ func _staged_instance_filter(field: String, expected: String) -> Array[String]:
 
 func market_card_ids() -> Array[String]:
 	var result: Array[String] = []
-	for card_definition: Dictionary in cards:
-		var card_id: String = String(card_definition.get("id", ""))
-		if not card_id.is_empty():
-			result.append(card_id)
+	for card_definition: Dictionary in staged_cards:
+		var card_id := String(card_definition.get("id", ""))
+		if card_id == "tusk_new" or String(card_definition.get("category", "")) == "equipment":
+			continue
+		result.append_array(staged_instance_ids_for_card(card_id))
 	return result
 
 
@@ -333,17 +344,29 @@ func _load_all() -> void:
 	var new_card_document: Dictionary = _load_document(NEW_CARD_PATH)
 	staged_cards = _dictionary_array(new_card_document.get("cards", []))
 	for staged_card: Dictionary in staged_cards:
-		if not staged_card.has("cost"):
+		if String(staged_card.get("category", "")) == "equipment":
+			var slot := String(staged_card.get("slot", ""))
+			staged_card["cost"] = (EQUIPMENT_COSTS.get(slot, {"stamina": 1, "mana": 0}) as Dictionary).duplicate()
+		elif not staged_card.has("cost"):
 			staged_card["cost"] = {"stamina": 0, "mana": 0}
+		var staged_cost: Dictionary = staged_card.get("cost", {}) as Dictionary
+		var total_cost := int(staged_cost.get("stamina", 0)) + int(staged_cost.get("mana", 0))
+		staged_card["price"] = 1 if total_cost <= 0 else total_cost
 	var new_character_document: Dictionary = _load_document(NEW_CHARACTER_PATH)
 	staged_characters = _dictionary_array(new_character_document.get("characters", []))
 	statuses = _dictionary_array(status_document.get("statuses", []))
 	effect_aliases = aliases_document.get("aliases", {}) as Dictionary
 	version = maxi(
-		int(card_document.get("version", 1)),
+		int(new_card_document.get("version", 1)),
 		maxi(
-			int(character_document.get("version", 1)),
-			maxi(int(event_document.get("version", 1)), int(status_document.get("version", 1)))
+			int(new_character_document.get("version", 1)),
+			maxi(
+				int(new_event_document.get("version", 1)),
+				maxi(
+					int(card_document.get("version", 1)),
+					maxi(int(character_document.get("version", 1)), maxi(int(event_document.get("version", 1)), int(status_document.get("version", 1))))
+				)
+			)
 		)
 	)
 	_index_definitions(cards, cards_by_id, "card")
@@ -453,7 +476,7 @@ func _validate_cards() -> void:
 		_validate_card_metadata(card_definition)
 		_validate_effects(card_definition.get("effects", []), "card %s" % card_id)
 		if String(card_definition.get("category", "")) == "response" and not ["heavenly_sense", "shrug_off"].has(card_id):
-			validation_errors.append("Response card %s is not allowed by the v5 launch rules." % card_id)
+			validation_errors.append("Response card %s is not allowed by the legacy compatibility rules." % card_id)
 	if cards_by_instance_id.size() != card_instances.size():
 		validation_errors.append("Card instance IDs must be globally unique.")
 

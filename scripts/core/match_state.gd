@@ -479,12 +479,10 @@ func _create_players(roster: Array[String]) -> void:
 		var runtime_professions: Array = (staged_definition.get("professions", []) as Array).duplicate() if not staged_definition.is_empty() else (definition.get("professions", [String(definition.get("profession", "neutral"))]) as Array).duplicate()
 		var runtime_profession := String(runtime_professions[0]) if not runtime_professions.is_empty() else String(definition.get("profession", "neutral"))
 		var position: Vector2i = start_positions[seat] if seat < start_positions.size() else Vector2i(1 + (seat % 2) * 6, 1 + (seat / 2) * 6)
-		var starter_cards: Array[String] = _string_array(definition.get("starter_cards", []))
 		var common_deck: Array[String] = _build_common_deck()
 		var profession_deck: Array[String] = _build_profession_deck(runtime_profession)
 		_shuffle_strings(common_deck)
 		_shuffle_strings(profession_deck)
-		_append_promoted_cards(common_deck, profession_deck, runtime_profession)
 		var max_health: int = int(staged_definition.get("health", definition.get("health", 7)))
 		var max_stamina: int = int(staged_definition.get("stamina", definition.get("stamina", 2)))
 		var max_mana: int = int(staged_definition.get("mana", definition.get("mana", 2)))
@@ -510,7 +508,7 @@ func _create_players(roster: Array[String]) -> void:
 			"position": position,
 			"hand": [],
 			"purchased_hand": [],
-			"deck": starter_cards.duplicate(),
+			"deck": [],
 			"discard": [],
 			"common_deck": common_deck,
 			"profession_deck": profession_deck,
@@ -532,13 +530,8 @@ func _create_players(roster: Array[String]) -> void:
 			"public_card_history": [],
 			"alive": true
 		}
-		_shuffle_strings(starter_cards)
-		var starting_hand: Array[String] = []
-		for _draw_index: int in int(rules.get("starting_hand", 4)):
-			if not starter_cards.is_empty():
-				starting_hand.append(starter_cards.pop_back())
-		player_state["hand"] = starting_hand
 		players.append(player_state)
+		_draw_cards(seat, int(rules.get("starting_hand", 4)))
 
 
 func _setup_market() -> void:
@@ -604,7 +597,6 @@ func _handle_switch_profession(payload: Dictionary) -> void:
 		active["profession"] = selected
 		var next_profession_deck := _build_profession_deck(selected)
 		_shuffle_strings(next_profession_deck)
-		_append_promoted_profession_cards(next_profession_deck, selected)
 		active["profession_deck"] = next_profession_deck
 		active["profession_discard"] = []
 		active["card_pool_profession"] = selected
@@ -684,7 +676,8 @@ func _legal_card_commands(actor_id: int) -> Array[Dictionary]:
 		seen[card_id] = true
 		var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
 		var category: String = String(definition.get("category", ""))
-		if category == "response" or not _can_pay(actor_id, definition):
+		var logical_id := String(catalog.call("logical_card_id", card_id))
+		if ["heavenly_sense_new", "shrug_off_new"].has(logical_id) or category == "response" or not _can_pay(actor_id, definition):
 			continue
 		result.append_array(_target_commands(MatchCommandScript.PLAY_CARD, actor_id, card_id, definition))
 	return result
@@ -738,6 +731,12 @@ func skill_usage_policy(player_id: int, skill_id: String) -> Dictionary:
 	return {
 		"revised_skill_id": revised_skill_id,
 		"revised_name": String(revised_skill.get("name", skill_id)),
+		"skill_type": String(revised_skill.get("skill_type", "standard")),
+		"resource_cost": (revised_skill.get("resource_cost", {}) as Dictionary).duplicate(true),
+		"has_exhaust": revised_skill.has("exhaust"),
+		"breakthrough_goal": (revised_skill.get("breakthrough_goal", {}) as Dictionary).duplicate(true),
+		"restore_lost_resources": bool(revised_skill.get("restore_lost_resources", false)),
+		"source_text": String(revised_skill.get("source_text", "")),
 		"uses_per_turn": uses_per_turn,
 		"used_this_turn": used_this_turn,
 		"remaining_this_turn": maxi(0, uses_per_turn - used_this_turn) if uses_per_turn > 0 else -1,
@@ -1261,11 +1260,13 @@ func _valid_response_cards(player_id: int, action_category: String) -> Array[Str
 			continue
 		seen[card_id] = true
 		var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
-		if String(definition.get("category", "")) != "response" or not ["heavenly_sense", "shrug_off"].has(card_id) or not _can_pay(player_id, definition):
+		var logical_id := String(catalog.call("logical_card_id", card_id))
+		if not ["heavenly_sense_new", "shrug_off_new"].has(logical_id) or not _can_pay(player_id, definition):
 			continue
-		var tags: Array[String] = _string_array(definition.get("tags", []))
-		if tags.has("response_any") or tags.has("response_%s" % action_category):
-			result.append(card_id)
+		for effect_value: Variant in definition.get("effects", []) as Array:
+			if effect_value is Dictionary and String((effect_value as Dictionary).get("op", "")) == "negate" and String((effect_value as Dictionary).get("category", "")) == action_category:
+				result.append(card_id)
+				break
 	return result
 
 
@@ -1676,47 +1677,13 @@ func _draw_cards(player_id: int, amount: int) -> void:
 
 
 func _build_common_deck() -> Array[String]:
-	var result: Array[String] = []
-	for definition: Dictionary in catalog.get("cards") as Array[Dictionary]:
-		var profession: String = String(definition.get("profession", "neutral"))
-		if profession == "neutral" or String(definition.get("category", "")) == "equipment":
-			result.append(String(definition.get("id", "")))
-	return result
-
-
-func _append_promoted_cards(common_deck: Array[String], profession_deck: Array[String], profession: String) -> void:
-	for promoted_value: Variant in rules.get("promoted_staged_cards", []) as Array:
-		var promoted_id := String(promoted_value)
-		var promoted_definition: Dictionary = catalog.call("staged_card_instance", promoted_id, 0) as Dictionary
-		if promoted_definition.is_empty():
-			continue
-		var promoted_profession := String(promoted_definition.get("profession", "neutral"))
-		var is_common := promoted_profession == "neutral"
-		if not is_common and promoted_profession != profession:
-			continue
-		var target_deck: Array[String] = common_deck if is_common else profession_deck
-		var promoted_instances: Array[String] = catalog.call("staged_instance_ids_for_card", promoted_id) as Array[String]
-		for index: int in promoted_instances.size():
-			target_deck.push_back(promoted_instances[index])
-
-
-func _append_promoted_profession_cards(profession_deck: Array[String], profession: String) -> void:
-	for promoted_value: Variant in rules.get("promoted_staged_cards", []) as Array:
-		var promoted_id := String(promoted_value)
-		var promoted_definition: Dictionary = catalog.call("staged_card_instance", promoted_id, 0) as Dictionary
-		if String(promoted_definition.get("profession", "neutral")) != profession:
-			continue
-		profession_deck.append_array(catalog.call("staged_instance_ids_for_card", promoted_id) as Array[String])
+	return catalog.call("staged_instance_ids_for_profession", "neutral") as Array[String]
 
 
 func _build_profession_deck(profession: String) -> Array[String]:
-	var result: Array[String] = []
 	if profession.is_empty() or profession == "neutral":
-		return result
-	for definition: Dictionary in catalog.get("cards") as Array[Dictionary]:
-		if String(definition.get("profession", "")) == profession:
-			result.append(String(definition.get("id", "")))
-	return result
+		return []
+	return catalog.call("staged_instance_ids_for_profession", profession) as Array[String]
 
 
 func _record_discard_origin(player_id: int, card_id: String) -> void:

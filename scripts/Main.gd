@@ -526,12 +526,12 @@ func _refresh_hand() -> void:
 		var card_id: String = String(card_value)
 		var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
 		var button: Button = Button.new()
-		button.custom_minimum_size = Vector2(260, 96)
+		button.custom_minimum_size = Vector2(250, 76)
 		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		var source_label: String = " · 商店保留" if card_index >= display_hand.size() - purchased_count else ""
 		var identity_badge := _card_identity_badge(definition)
 		var identity_prefix := "%s · " % identity_badge if not identity_badge.is_empty() else "旧版牌 · "
-		button.text = "%s%s%s\n%s · %s\n%s" % [identity_prefix, String(definition.get("name", card_id)), source_label, _cost_text(definition), _range_text(definition), _short_text(String(definition.get("description", "")), 28)]
+		button.text = "%s%s%s\n%s · %s" % [identity_prefix, String(definition.get("name", card_id)), source_label, _cost_text(definition), _range_text(definition)]
 		button.icon = _category_icon(String(definition.get("category", "")))
 		button.tooltip_text = "%s\n%s\n%s · %s\n%s" % [String(definition.get("name", card_id)), _card_identity_text(definition), _cost_text(definition), _range_text(definition), String(definition.get("description", ""))]
 		button.disabled = not _has_definition_command(legal, MatchCommandScript.PLAY_CARD, card_id)
@@ -579,6 +579,19 @@ func _skill_usage_text(policy: Dictionary) -> String:
 	return "不限次数" if limits.is_empty() else " / ".join(limits)
 
 
+func _skill_type_text(policy: Dictionary) -> String:
+	var skill_type := String(policy.get("skill_type", "standard"))
+	var label := {
+		"ability": "能力技",
+		"breakthrough_skill": "突破技",
+		"passive": "被动技",
+		"standard": "技能"
+	}.get(skill_type, "技能") as String
+	if bool(policy.get("has_exhaust", false)):
+		label += " · 可耗尽"
+	return label
+
+
 func _refresh_skills() -> void:
 	_clear_children(skill_box)
 	var human: Dictionary = state.call("player", 0) as Dictionary
@@ -609,12 +622,13 @@ func _refresh_skills() -> void:
 		var skill_id: String = String(skill.get("id", ""))
 		var usage_policy: Dictionary = state.call("skill_usage_policy", 0, skill_id) as Dictionary
 		var usage_text := _skill_usage_text(usage_policy)
+		var type_text := _skill_type_text(usage_policy)
 		var button: Button = Button.new()
 		button.custom_minimum_size.y = 66
 		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		button.text = "%s · %s\n无资源消耗 · %s\n%s" % [String(skill.get("name", skill_id)), usage_text, _range_text(skill), _short_text(String(skill.get("description", "")), 20)]
+		button.text = "%s · %s\n%s · %s\n%s" % [String(usage_policy.get("revised_name", skill.get("name", skill_id))), type_text, usage_text, _range_text(skill), _short_text(String(usage_policy.get("source_text", skill.get("description", ""))), 20)]
 		button.icon = load("res://assets/third_party/lucide/sparkles.svg") as Texture2D
-		button.tooltip_text = "%s\n使用限制：%s\n%s" % [String(skill.get("name", skill_id)), usage_text, String(skill.get("description", ""))]
+		button.tooltip_text = "%s · %s\n使用限制：%s\n%s\n新版复杂效果按 provisional 清单逐项接入。" % [String(usage_policy.get("revised_name", skill.get("name", skill_id))), type_text, usage_text, String(usage_policy.get("source_text", skill.get("description", "")))]
 		button.disabled = not _has_definition_command(legal, MatchCommandScript.USE_SKILL, skill_id)
 		button.pressed.connect(_select_skill.bind(skill_id))
 		skill_box.add_child(button)

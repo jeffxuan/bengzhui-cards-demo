@@ -24,9 +24,9 @@ func _init() -> void:
 	_test_targeting_and_public_history()
 	_test_purchased_cards_persist()
 	_test_thunderstorm_skill_discard()
-	_test_promoted_neutral_cards()
+	_test_revised_decks_and_equipment_costs()
 	if failures.is_empty():
-		print("RULE_TESTS_OK: v5 skill limits, suits/ranks, resources, discard continuations, responses, pressure, targeting, and public history passed.")
+		print("RULE_TESTS_OK: v6 revised-only shuffled decks, equipment costs, skill metadata, suits/ranks, responses, and continuations passed.")
 		quit(0)
 		return
 	for failure: String in failures:
@@ -79,13 +79,21 @@ func _test_content_contract() -> void:
 	var shooter_pool: Array = catalog.call("staged_draw_pool_for_profession", "shooter") as Array
 	_expect(shooter_pool.has("slash_new#001") and shooter_pool.has("sniper_new#001"), "Profession draw pool must include common and current-profession cards.")
 	_expect(not shooter_pool.has("berserker_blow_new#001"), "Profession draw pool must exclude other professions.")
-	_expect(int(rules.get("version", 0)) == 5, "Rules must be v5.")
+	_expect(int(rules.get("version", 0)) == 6, "Rules must be v6.")
 	_expect(not rules.has("round_limit"), "Round limit must be removed.")
-	var promoted_cards: Array = rules.get("promoted_staged_cards", []) as Array
-	for promoted_id: String in ["slash_new", "iron_body_new", "purify_new", "hearty_meal_new", "calm_mind_new", "rally_new", "soul_drain_new", "armor_break_new", "rapid_healing_new", "antidote_new", "blood_guard_new", "sacrifice_new", "feast_new", "swift_attack_new", "ghost_step_new", "holy_spring_guardian_new", "scout_new", "trek_new", "digging_new", "prayer_new", "echo_new", "greedy_grip_new", "thunder_strike_new", "blazing_blast_new", "chaos_wave_new", "vampire_bite_new", "blood_surge_new", "poisoned_strike_new"]:
-		_expect(promoted_cards.has(promoted_id), "Safe staged card promotion must include %s." % promoted_id)
+	_expect(not rules.has("promoted_staged_cards"), "v6 must not retain a partial revised-card promotion list.")
 	var armor_break_definition: Dictionary = catalog.call("resolve_card", "armor_break_new#001") as Dictionary
 	_expect(String(armor_break_definition.get("target", "")) == "enemy" and int(armor_break_definition.get("range", 0)) == 1, "Armor Break must use an adjacent enemy target.")
+	var weapon_definition: Dictionary = catalog.call("resolve_card", "crowbar_new#001") as Dictionary
+	var armor_definition: Dictionary = catalog.call("resolve_card", "thorn_armor_new#001") as Dictionary
+	var accessory_definition: Dictionary = catalog.call("resolve_card", "strong_shell_new#001") as Dictionary
+	_expect(int((weapon_definition.get("cost", {}) as Dictionary).get("stamina", 0)) == 1, "Revised weapons must cost one stamina to equip.")
+	_expect(int((armor_definition.get("cost", {}) as Dictionary).get("stamina", 0)) == 1, "Revised armor must cost one stamina to equip.")
+	_expect(int((accessory_definition.get("cost", {}) as Dictionary).get("mana", 0)) == 1, "Revised accessories must cost one mana to equip.")
+	var k_strategy: Dictionary = catalog.call("staged_skill", "k", "k_strategy") as Dictionary
+	_expect(String(k_strategy.get("skill_type", "")) == "ability" and k_strategy.has("exhaust"), "K Strategy must expose ability and exhaust metadata.")
+	var ginger_power: Dictionary = catalog.call("staged_skill", "ginger", "ginger_power") as Dictionary
+	_expect(String(ginger_power.get("skill_type", "")) == "breakthrough_skill" and ginger_power.has("breakthrough_goal"), "Ginger Power must expose breakthrough metadata and its documented goal.")
 	for character_value: Variant in catalog.get("characters") as Array:
 		for skill_value: Variant in (character_value as Dictionary).get("skills", []) as Array:
 			var cost: Dictionary = (skill_value as Dictionary).get("cost", {}) as Dictionary
@@ -208,11 +216,12 @@ func _test_response_window_resources() -> void:
 	var target: Dictionary = state.call("player", 1) as Dictionary
 	source["position"] = Vector2i(2, 2)
 	target["position"] = Vector2i(3, 2)
-	(target.get("hand", []) as Array).append("heavenly_sense")
-	(target.get("hand", []) as Array).append("iron_body")
+	(source.get("hand", []) as Array).append("slash_new#001")
+	(target.get("hand", []) as Array).append("heavenly_sense_new#001")
+	(target.get("hand", []) as Array).append("iron_body_new#001")
 	state.players[0] = source
 	state.players[1] = target
-	var attack: Dictionary = _find_command(state, MatchCommandScript.PLAY_CARD, "slash")
+	var attack: Dictionary = _find_command(state, MatchCommandScript.PLAY_CARD, "slash_new#001")
 	_expect(bool(state.call("submit_command", attack)), "Attack should open a response window.")
 	var legal: Array[Dictionary] = state.call("legal_commands", 1) as Array[Dictionary]
 	var response_ids: Array[String] = []
@@ -220,7 +229,7 @@ func _test_response_window_resources() -> void:
 		var card_id: String = String((command.get("payload", {}) as Dictionary).get("card_id", ""))
 		if not card_id.is_empty():
 			response_ids.append(card_id)
-	_expect(response_ids == ["heavenly_sense"], "Off-turn zero resources must leave only Heavenly Sense for attacks.")
+	_expect(response_ids == ["heavenly_sense_new#001"], "Off-turn zero resources must leave only revised Heavenly Sense for attacks.")
 
 
 func _test_discard_phase_and_replay_continuation() -> void:
@@ -379,16 +388,48 @@ func _test_thunderstorm_skill_discard() -> void:
 	_expect(_find_command(unavailable_state, MatchCommandScript.USE_SKILL, "q_thunderstorm").is_empty(), "Thunderstorm must not be legal when its discard requirement cannot be paid.")
 
 
-func _test_promoted_neutral_cards() -> void:
+func _test_revised_decks_and_equipment_costs() -> void:
 	var state: RefCounted = _state(["q", "ginger", "maddy", "signal"], 112)
+	for player_id: int in 4:
+		var player_state: Dictionary = state.call("player", player_id) as Dictionary
+		for zone_name: String in ["hand", "common_deck", "profession_deck"]:
+			for card_value: Variant in player_state.get(zone_name, []) as Array:
+				var instance_id := String(card_value)
+				_expect(instance_id.contains("#") and String(catalog.call("logical_card_id", instance_id)).ends_with("_new"), "%s must contain revised card instances only." % zone_name)
+	for market_value: Variant in state.get("market") as Array:
+		var market_id := String(market_value)
+		_expect(String(catalog.call("logical_card_id", market_id)).ends_with("_new"), "Market must contain revised card instances only.")
+
+	var same_seed: RefCounted = _state(["q", "ginger", "maddy", "signal"], 112)
+	var other_seed: RefCounted = _state(["q", "ginger", "maddy", "signal"], 113)
+	var common_deck: Array = (state.call("player", 0) as Dictionary).get("common_deck", []) as Array
+	var same_deck: Array = (same_seed.call("player", 0) as Dictionary).get("common_deck", []) as Array
+	var other_deck: Array = (other_seed.call("player", 0) as Dictionary).get("common_deck", []) as Array
+	_expect(common_deck == same_deck, "The same match seed must reproduce the revised deck order.")
+	_expect(common_deck != other_deck, "Different match seeds must produce different revised deck orders.")
+	var logical_names: Dictionary = {}
+	var transitions := 0
+	var previous_name := ""
+	for card_value: Variant in common_deck:
+		var logical_name := String(catalog.call("logical_card_id", String(card_value)))
+		logical_names[logical_name] = true
+		if not previous_name.is_empty() and logical_name != previous_name:
+			transitions += 1
+		previous_name = logical_name
+	_expect(transitions > logical_names.size(), "The shuffled deck must interleave names instead of exhausting one name group at a time.")
+
 	var q: Dictionary = state.call("player", 0) as Dictionary
-	var common_deck: Array = q.get("common_deck", []) as Array
-	for promoted_id: String in ["slash_new#001", "iron_body_new#001", "purify_new#001", "hearty_meal_new#001", "calm_mind_new#001", "rally_new#001"]:
-		_expect(common_deck.has(promoted_id), "Promoted neutral card %s must enter the public draw pool." % promoted_id)
-	q["hand"] = ["hearty_meal_new#001"]
+	q["hand"] = ["crowbar_new#001"]
+	q["purchased_hand"] = []
+	q["stamina"] = 0
+	q["mana"] = 0
 	state.players[0] = q
-	var meal := _find_command(state, MatchCommandScript.PLAY_CARD, "hearty_meal_new#001")
-	_expect(not meal.is_empty() and bool(state.call("submit_command", meal)), "Promoted Hearty Meal must be playable through the normal command path.")
+	_expect(_find_command(state, MatchCommandScript.PLAY_CARD, "crowbar_new#001").is_empty(), "A weapon must be illegal without its stamina cost.")
+	q["stamina"] = 1
+	state.players[0] = q
+	var equip_command := _find_command(state, MatchCommandScript.PLAY_CARD, "crowbar_new#001")
+	_expect(not equip_command.is_empty() and bool(state.call("submit_command", equip_command)), "A weapon must be playable when its stamina cost can be paid.")
+	_expect(int((state.call("player", 0) as Dictionary).get("stamina", -1)) == 0, "Equipping a weapon must spend one stamina.")
 
 
 func _state(roster: Array[String], seed: int) -> RefCounted:

@@ -18,4 +18,4 @@ GODOT_BIN=/Users/jeff.jiang/Desktop/Godot.app/Contents/MacOS/Godot scripts/ci/ve
 
 发布候选版还需运行 10000 局模拟、检查两个平台导出物，并完成 `docs/RELEASE_CHECKLIST.md` 中的真人与真实 Windows 验证。最新本地结果记录在 `docs/VERIFICATION.md`。
 
-当前实现以 `docs/RULES.md` 的 v5 规则合同为准；旧 v2-v4 中途对局不兼容，程序会保留原文件并提示重新开始。公开源码采用 MIT，第三方素材仍以 `THIRD_PARTY_NOTICES.md` 中的原许可证为准。
+当前实现以 `docs/RULES.md` 的 v6 规则合同为准；旧 v2-v5 中途对局不兼容，程序会保留原文件并提示重新开始。公开源码采用 MIT，第三方素材仍以 `THIRD_PARTY_NOTICES.md` 中的原许可证为准。

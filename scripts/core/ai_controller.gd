@@ -9,12 +9,19 @@ func choose_command(state: RefCounted, actor_id: int) -> Dictionary:
 	if commands.is_empty():
 		return {}
 	var actor: Dictionary = state.call("player", actor_id) as Dictionary
-	if int(actor.get("turn_commands", 0)) >= 2:
+	var alive_count := 0
+	for player_value: Variant in state.get("players") as Array:
+		if bool((player_value as Dictionary).get("alive", false)):
+			alive_count += 1
+	# The third decision is simulation-only pressure for a final duel. It keeps
+	# the AI from ending repeated two-player turns while an attack is available.
+	var decision_budget := 3 if alive_count == 2 else 2
+	if int(actor.get("turn_commands", 0)) >= decision_budget:
 		for command: Dictionary in commands:
 			if String(command.get("type", "")) == MatchCommandScript.END_TURN:
 				return command
 	if String(commands[0].get("type", "")) == MatchCommandScript.SWITCH_PROFESSION:
-		return commands[0]
+		return _choose_profession_command(state, commands)
 	if String(commands[0].get("type", "")) == MatchCommandScript.DISCARD_CARDS:
 		return _choose_discard_command(state, actor_id, commands[0].get("payload", {}) as Dictionary)
 	if String(commands[0].get("type", "")) == MatchCommandScript.SKILL_DISCARD:
@@ -51,6 +58,34 @@ func _score_command(state: RefCounted, actor_id: int, command: Dictionary, perso
 		MatchCommandScript.END_TURN:
 			return -100.0
 	return -1000.0
+
+
+func _choose_profession_command(state: RefCounted, commands: Array[Dictionary]) -> Dictionary:
+	var alive_count := 0
+	for player_value: Variant in state.get("players") as Array:
+		if bool((player_value as Dictionary).get("alive", false)):
+			alive_count += 1
+	# This is a deck-selection heuristic, not a rule change. Staged profession
+	# decks differ greatly in how many effects have been implemented so far.
+	var duel_priority := {
+		"shooter": 40.0,
+		"arcanist": 32.0,
+		"berserker": 28.0,
+		"assassin": 22.0,
+		"guardian": 12.0,
+		"ambitionist": 6.0,
+		"adventurer": -18.0,
+		"": 0.0
+	}
+	var best_command: Dictionary = commands[0]
+	var best_score := -100000.0
+	for command: Dictionary in commands:
+		var profession := String((command.get("payload", {}) as Dictionary).get("profession", ""))
+		var score := float(duel_priority.get(profession, 0.0)) if alive_count == 2 else 0.0
+		if score > best_score:
+			best_score = score
+			best_command = command
+	return best_command.duplicate(true)
 
 
 func _choose_discard_command(state: RefCounted, actor_id: int, payload: Dictionary) -> Dictionary:
@@ -194,6 +229,8 @@ func _score_definition(state: RefCounted, actor_id: int, payload: Dictionary, is
 	var score: float = 15.0
 	var target_id: int = int(payload.get("target_id", actor_id))
 	var alive_count := 0
+	var has_executable_effect := false
+	var has_damage_effect := false
 	for player_value: Variant in state.get("players") as Array:
 		if bool((player_value as Dictionary).get("alive", false)):
 			alive_count += 1
@@ -202,8 +239,13 @@ func _score_definition(state: RefCounted, actor_id: int, payload: Dictionary, is
 			continue
 		var effect: Dictionary = effect_value as Dictionary
 		var operation: String = String(effect.get("op", ""))
+		# A staged card can be provisional while still having an implemented
+		# effect. Only completely unmapped cards are dead actions for the AI.
+		if operation != "provisional":
+			has_executable_effect = true
 		var amount: float = float(effect.get("amount", effect.get("stacks", 0)))
 		if operation == "damage":
+			has_damage_effect = true
 			score += 22.0 + amount * (9.0 if persona == "offense" else 7.0)
 			if alive_count == 2:
 				score += 40.0
@@ -229,8 +271,16 @@ func _score_definition(state: RefCounted, actor_id: int, payload: Dictionary, is
 			score += amount * 8.0
 		elif operation == "self_damage":
 			score -= amount * 5.0
+	if not has_executable_effect:
+		score -= 70.0
+		if alive_count == 2:
+			score -= 50.0
 	if String(definition.get("category", "")) == "equipment":
-		score += 10.0
+		# Equipment with no executable effect should not consume an AI command in a
+		# duel. It remains fully available to human players.
+		score += 10.0 if has_executable_effect else -25.0
+	if alive_count == 2 and has_damage_effect:
+		score += 30.0
 	# Keep simulation opponents from over- or under-selecting the current
 	# showcase kits. This only affects AI policy; player rules are unchanged.
 	var character_id: String = String(actor.get("character_id", ""))

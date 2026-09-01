@@ -10,6 +10,8 @@ const EVENT_CHOICE := "event_choice"
 const END_TURN := "end_turn"
 const DISCARD_CARDS := "discard_cards"
 const SWITCH_PROFESSION := "switch_profession"
+const SKILL_DISCARD := "skill_discard"
+const SKILL_CHOICE := "skill_choice"
 
 
 static func make(command_type: String, actor_id: int, payload: Dictionary = {}) -> Dictionary:

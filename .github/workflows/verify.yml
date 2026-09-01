@@ -20,10 +20,12 @@ jobs:
           include-templates: true
       - name: Verify rules, UI, and simulations
         run: scripts/ci/verify.sh
+      - name: Prepare export directories
+        run: mkdir -p export/windows export/macos
       - name: Export Windows build
-        run: godot --headless --path . --export-release "Windows Desktop"
+        run: godot --headless --path . --export-release "Windows Desktop" export/windows/BengzhuiCards.exe
       - name: Export macOS build
-        run: godot --headless --path . --export-release "macOS"
+        run: godot --headless --path . --export-release "macOS" export/macos/BengzhuiCards.zip
       - uses: actions/upload-artifact@v4
         with:
           name: bengzhui-public-demo
@@ -31,6 +33,7 @@ jobs:
           if-no-files-found: error
 
   windows-release-smoke:
+    needs: verify
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -45,13 +48,19 @@ jobs:
         env:
           SIMULATION_MATCHES: 1000
         run: scripts/ci/verify.sh
-      - name: Export Windows x86_64
-        run: godot --headless --path . --export-release "Windows Desktop"
+      - name: Download Windows export
+        uses: actions/download-artifact@v4
+        with:
+          name: bengzhui-public-demo
+          path: export
       - name: Run Windows export smoke
         shell: pwsh
-        run: ./export/windows/BengzhuiCards.exe --export-smoke
+        run: |
+          $executable = Get-ChildItem -Recurse export/windows -Filter '*.exe' | Select-Object -First 1 -ExpandProperty FullName
+          if ([string]::IsNullOrWhiteSpace($executable)) { throw 'Windows export executable was not produced.' }
+          & $executable --export-smoke
       - uses: actions/upload-artifact@v4
         with:
-          name: bengzhui-windows-dev2
+          name: bengzhui-windows-dev4
           path: export/windows/
           if-no-files-found: error

@@ -1,6 +1,7 @@
 extends SceneTree
 
 const ContentCatalogScript = preload("res://scripts/core/content_catalog.gd")
+const AIControllerScript = preload("res://scripts/core/ai_controller.gd")
 const MatchCommandScript = preload("res://scripts/core/match_command.gd")
 const MatchStateScript = preload("res://scripts/core/match_state.gd")
 
@@ -15,13 +16,18 @@ func _init() -> void:
 	_test_content_contract()
 	_test_profession_switch_and_opening_draw()
 	_test_turn_resources_and_free_character_skills()
+	_test_revised_skill_usage_limits()
+	_test_k_brain_and_ginger_waist()
+	_test_ai_duel_damage_priority()
 	_test_response_window_resources()
 	_test_discard_phase_and_replay_continuation()
 	_test_extra_action_and_round_pressure()
 	_test_targeting_and_public_history()
 	_test_purchased_cards_persist()
+	_test_thunderstorm_skill_discard()
+	_test_revised_decks_and_equipment_costs()
 	if failures.is_empty():
-		print("RULE_TESTS_OK: v4 resources, discard continuations, responses, pressure, targeting, and public history passed.")
+		print("RULE_TESTS_OK: v8 revised skills, choice flows, suits/ranks, responses, and continuations passed.")
 		quit(0)
 		return
 	for failure: String in failures:
@@ -31,8 +37,64 @@ func _init() -> void:
 
 func _test_content_contract() -> void:
 	_expect(bool(catalog.call("is_valid")), "Content catalog must validate.")
-	_expect(int(rules.get("version", 0)) == 4, "Rules must be v4.")
+	var instances: Array = catalog.get("card_instances") as Array
+	_expect(instances.size() == (catalog.get("cards") as Array).size(), "Legacy logical cards must each receive one instance.")
+	var slash_instance: Dictionary = catalog.call("card_instance", "slash#001") as Dictionary
+	_expect(String(slash_instance.get("card_id", "")) == "slash", "Card instances must retain their logical card ID.")
+	var staged_resolved: Dictionary = catalog.call("resolve_card", "slash_new#001") as Dictionary
+	_expect(String(staged_resolved.get("instance_id", "")) == "slash_new#001", "Catalog resolve_card must support staged instance IDs.")
+	_expect(String(staged_resolved.get("description", "")) == String(staged_resolved.get("source_text", "")), "Staged card instances must expose source text as their UI description.")
+	var resolved_instance: Dictionary = catalog.call("card", "slash#001") as Dictionary
+	_expect(String(resolved_instance.get("id", "")) == "slash", "Card lookup must resolve instance IDs.")
+	_expect(String(catalog.call("logical_card_id", "slash#001")) == "slash", "Logical card ID lookup must resolve instances.")
+	_expect(String(slash_instance.get("suit", "")) == "none" and int(slash_instance.get("rank", -1)) == 0, "Legacy cards must normalize neutral suit metadata.")
+	_expect((catalog.call("provisional_report") as Array).size() == 200, "Provisional report must include staged cards, events, and characters.")
+	_expect((catalog.get("staged_characters") as Array).size() == 8, "新版首发角色暂存清单应包含8名角色。")
+	var q_staged: Dictionary = catalog.call("staged_character", "q") as Dictionary
+	_expect((q_staged.get("professions", []) as Array).size() == 2, "Q must expose both revised professions.")
+	var q_skill: Dictionary = catalog.call("staged_skill", "q", "q_thunderstorm") as Dictionary
+	_expect(not q_skill.is_empty() and bool(q_skill.get("source_text", "") != ""), "Staged character skills must be addressable by stable ID.")
+	var q_runtime: Dictionary = catalog.call("executable_staged_skill", "q", "q_thunderstorm") as Dictionary
+	_expect(String(q_runtime.get("target", "")) == "all_enemies_in_range" and (q_runtime.get("effects", []) as Array).size() == 2, "Q Thunderstorm must expose a provisional executable effect chain.")
+	_expect(int((q_runtime.get("discard_requirement", {}) as Dictionary).get("rank_sum", 0)) == 23, "Thunderstorm must expose its rank-sum discard requirement.")
+	_expect(not (q_runtime.get("provisional_notes", []) as Array).has("弃牌点数和为23的前置条件尚未接入"), "Thunderstorm provisional notes must not claim its implemented discard requirement is missing.")
+	_expect(int(catalog.call("staged_skill", "k", "k_brain").get("uses_per_turn", 0)) == 1, "Explicit once-per-turn skill limits must be structured.")
+	_expect(int(catalog.call("staged_skill", "k", "k_strategy").get("uses_per_profession_per_match", 0)) == 1, "K Strategy must encode its once-per-profession-per-match limit.")
+	_expect(not (catalog.call("staged_skill", "ginger", "ginger_waist") as Dictionary).has("uses_per_turn"), "Skills without explicit limits must remain reusable.")
+	_expect((catalog.call("staged_instance_ids_for_suit", "spades") as Array).size() > 0, "Suit query must return staged card instances.")
+	_expect((catalog.call("staged_instance_ids_for_color", "red") as Array).size() > 0, "Color query must return staged card instances.")
+	_expect((catalog.call("staged_instance_ids_for_rank", 13) as Array).size() > 0, "Rank query must return staged card instances.")
+	_expect(int(catalog.call("staged_rank_sum", ["slash_new#001", "slash_new#002"])) == 3, "Rank sum must resolve staged instance IDs.")
+	var staged_hand: Array = ["slash_new#001", "slash_new#002", "tusk_new#001", "crossfire_new#001"]
+	_expect(String(catalog.call("validate_rank_sum_selection", staged_hand, ["slash_new#001", "tusk_new#001"], 2, 1)) == "", "Rank-sum selection should accept an exact valid selection.")
+	_expect(not String(catalog.call("validate_rank_sum_selection", staged_hand, ["slash_new#001"], 2, 1)).is_empty(), "Rank-sum selection should reject an incorrect sum.")
+	_expect(not String(catalog.call("validate_rank_sum_selection", staged_hand, ["slash_new#001", "slash_new#001"], 2, 1)).is_empty(), "Rank-sum selection should reject duplicate instances.")
+	_expect((catalog.get("staged_events") as Array).size() == 27, "新版事件暂存清单应包含文档中的27个事件。")
+	_expect((catalog.get("staged_cards") as Array).size() == 165, "新版通用牌及六个职业牌暂存清单应包含165种牌。")
+	var readiness: Dictionary = catalog.call("staged_execution_readiness") as Dictionary
+	_expect(int(readiness.get("total", 0)) == 165 and (readiness.get("ready_ids", []) as Array).has("slash_new") and (readiness.get("provisional_ids", []) as Array).has("crossfire_new"), "Staged execution readiness must separate mapped and provisional effects.")
+	var staged_instance: Dictionary = catalog.call("staged_card_instance", "slash_new", 0) as Dictionary
+	_expect(String(staged_instance.get("instance_id", "")) == "slash_new#001" and String(staged_instance.get("suit", "")) == "spades", "Staged card instances must resolve suit and ID.")
+	_expect((catalog.call("staged_card_ids_for_profession", "berserker") as Array).size() == 21, "Berserker staged pool must expose 21 definitions.")
+	_expect((catalog.call("staged_instance_ids_for_profession", "shooter") as Array).size() == 75, "Shooter staged pool must expose 75 instances.")
+	var shooter_pool: Array = catalog.call("staged_draw_pool_for_profession", "shooter") as Array
+	_expect(shooter_pool.has("slash_new#001") and shooter_pool.has("sniper_new#001"), "Profession draw pool must include common and current-profession cards.")
+	_expect(not shooter_pool.has("berserker_blow_new#001"), "Profession draw pool must exclude other professions.")
+	_expect(int(rules.get("version", 0)) == 8, "Rules must be v8.")
 	_expect(not rules.has("round_limit"), "Round limit must be removed.")
+	_expect(not rules.has("promoted_staged_cards"), "v8 must not retain a partial revised-card promotion list.")
+	var armor_break_definition: Dictionary = catalog.call("resolve_card", "armor_break_new#001") as Dictionary
+	_expect(String(armor_break_definition.get("target", "")) == "enemy" and int(armor_break_definition.get("range", 0)) == 1, "Armor Break must use an adjacent enemy target.")
+	var weapon_definition: Dictionary = catalog.call("resolve_card", "crowbar_new#001") as Dictionary
+	var armor_definition: Dictionary = catalog.call("resolve_card", "thorn_armor_new#001") as Dictionary
+	var accessory_definition: Dictionary = catalog.call("resolve_card", "strong_shell_new#001") as Dictionary
+	_expect(int((weapon_definition.get("cost", {}) as Dictionary).get("stamina", 0)) == 1, "Revised weapons must cost one stamina to equip.")
+	_expect(int((armor_definition.get("cost", {}) as Dictionary).get("stamina", 0)) == 1, "Revised armor must cost one stamina to equip.")
+	_expect(int((accessory_definition.get("cost", {}) as Dictionary).get("mana", 0)) == 1, "Revised accessories must cost one mana to equip.")
+	var k_strategy: Dictionary = catalog.call("staged_skill", "k", "k_strategy") as Dictionary
+	_expect(String(k_strategy.get("skill_type", "")) == "ability" and k_strategy.has("exhaust"), "K Strategy must expose ability and exhaust metadata.")
+	var ginger_power: Dictionary = catalog.call("staged_skill", "ginger", "ginger_power") as Dictionary
+	_expect(String(ginger_power.get("skill_type", "")) == "breakthrough_skill" and ginger_power.has("breakthrough_goal"), "Ginger Power must expose breakthrough metadata and its documented goal.")
 	for character_value: Variant in catalog.get("characters") as Array:
 		for skill_value: Variant in (character_value as Dictionary).get("skills", []) as Array:
 			var cost: Dictionary = (skill_value as Dictionary).get("cost", {}) as Dictionary
@@ -46,8 +108,18 @@ func _test_content_contract() -> void:
 func _test_profession_switch_and_opening_draw() -> void:
 	var keep_state: RefCounted = MatchStateScript.new(rules, catalog, ["q", "ginger", "maddy", "signal"], 100)
 	_expect(bool(keep_state.get("profession_choice_pending")), "Turn must begin with profession choice.")
+	var initial_player: Dictionary = keep_state.call("player", 0) as Dictionary
+	_expect(String((initial_player.get("common_deck", []) as Array).back()).contains("#"), "A promoted suit/rank card must be at the common draw end.")
+	_expect(String((initial_player.get("profession_deck", []) as Array).back()).contains("#"), "A promoted suit/rank card must be at the profession draw end.")
 	keep_state.call("submit_command", MatchCommandScript.make(MatchCommandScript.SWITCH_PROFESSION, 0, {"profession": ""}))
-	_expect((keep_state.call("player", 0) as Dictionary).get("hand", []).size() == 7, "Keeping profession on round one draws three cards.")
+	var opening_player: Dictionary = keep_state.call("player", 0) as Dictionary
+	_expect(opening_player.get("hand", []).size() == 7, "Keeping profession on round one draws three cards.")
+	var visible_identity_count := 0
+	for card_value: Variant in opening_player.get("hand", []) as Array:
+		var definition: Dictionary = catalog.call("resolve_card", String(card_value)) as Dictionary
+		if String(definition.get("suit", "none")) != "none" and int(definition.get("rank", 0)) in range(1, 14):
+			visible_identity_count += 1
+	_expect(visible_identity_count >= 3, "The opening draw must immediately expose suit/rank card instances.")
 	var switch_state: RefCounted = MatchStateScript.new(rules, catalog, ["q", "ginger", "maddy", "signal"], 100)
 	switch_state.call("submit_command", MatchCommandScript.make(MatchCommandScript.SWITCH_PROFESSION, 0, {"profession": "shooter"}))
 	var switched_player: Dictionary = switch_state.call("player", 0) as Dictionary
@@ -62,6 +134,10 @@ func _test_turn_resources_and_free_character_skills() -> void:
 	var state: RefCounted = _state(["q", "ginger", "maddy", "signal"], 101)
 	var active: Dictionary = state.call("player", 0) as Dictionary
 	_expect(int(active.get("stamina", 0)) == int(active.get("max_stamina", 0)), "Active player restores stamina.")
+	var resource_snapshot: Dictionary = state.call("deterministic_snapshot") as Dictionary
+	var snapshot_player: Dictionary = (resource_snapshot.get("players", []) as Array)[0] as Dictionary
+	_expect(snapshot_player.has("stamina") and snapshot_player.has("mana") and snapshot_player.has("actions"), "Deterministic snapshots must include player resources and actions.")
+	_expect(resource_snapshot.has("pending_action") and resource_snapshot.has("pending_event"), "Deterministic snapshots must include pending action and event state.")
 	_expect(int((state.call("player", 1) as Dictionary).get("stamina", -1)) == 0 and int((state.call("player", 1) as Dictionary).get("mana", -1)) == 0, "Off-turn resources must be zero.")
 	var target: Dictionary = state.call("player", 1) as Dictionary
 	target["position"] = Vector2i(3, 2)
@@ -73,11 +149,152 @@ func _test_turn_resources_and_free_character_skills() -> void:
 	_expect(not command.is_empty(), "A character skill must remain usable at zero resources.")
 	if not command.is_empty():
 		_expect(bool(state.call("submit_command", command)), "Free character skill should resolve.")
-		_expect(int((state.call("player", 0) as Dictionary).get("actions", 0)) == 1, "Character skill still consumes one action.")
+		_expect(int((state.call("player", 0) as Dictionary).get("actions", 0)) == 2, "Character skills must not be limited by action points.")
 		var repeated: Dictionary = _find_command(state, MatchCommandScript.USE_SKILL, "q_thunder_call")
-		_expect(not repeated.is_empty(), "The same character skill must remain usable while actions remain.")
+		_expect(not repeated.is_empty(), "Skills without an explicit uses_per_turn limit must be reusable.")
 		if not repeated.is_empty():
-			_expect(bool(state.call("submit_command", repeated)), "Repeated character skill should resolve.")
+			_expect(bool(state.call("submit_command", repeated)), "A reusable skill should resolve a second time.")
+
+
+func _test_revised_skill_usage_limits() -> void:
+	var k_state: RefCounted = _state(["k", "ginger", "maddy", "signal"], 113)
+	var brain_policy: Dictionary = k_state.call("skill_usage_policy", 0, "k_megamind") as Dictionary
+	_expect(int(brain_policy.get("uses_per_turn", 0)) == 1 and int(brain_policy.get("remaining_this_turn", -1)) == 1, "K Brain must expose one remaining use at turn start.")
+	var brain_command := _find_command(k_state, MatchCommandScript.USE_SKILL, "k_megamind")
+	_expect(not brain_command.is_empty() and bool(k_state.call("submit_command", brain_command)), "K Brain must be legal before its first use.")
+	var brain_request: Dictionary = k_state.get("pending_skill_discard") as Dictionary
+	_expect(String(brain_request.get("selection_mode", "")) == "count" and int(brain_request.get("required_count", 0)) == 1, "K Brain must request exactly one discarded card.")
+	var brain_hand: Array = (k_state.call("player", 0) as Dictionary).get("hand", []) as Array
+	if not brain_hand.is_empty():
+		var brain_discard := MatchCommandScript.make(MatchCommandScript.SKILL_DISCARD, 0, {"request_id": brain_request.get("request_id", ""), "card_ids": [String(brain_hand[0])]})
+		_expect(bool(k_state.call("submit_command", brain_discard)), "K Brain's one-card discard must resolve.")
+	brain_policy = k_state.call("skill_usage_policy", 0, "k_megamind") as Dictionary
+	_expect(int(brain_policy.get("remaining_this_turn", -1)) == 0, "K Brain must report zero remaining uses after use.")
+	_expect(_find_command(k_state, MatchCommandScript.USE_SKILL, "k_megamind").is_empty(), "K Brain must be unavailable after one use in the same turn.")
+
+	var strategy_policy: Dictionary = k_state.call("skill_usage_policy", 0, "k_brainstorm") as Dictionary
+	_expect(int(strategy_policy.get("uses_per_profession_per_match", 0)) == 1, "K Strategy must expose its per-profession match limit.")
+	_expect(bool(strategy_policy.get("executable", false)), "K Strategy must be executable through the new deterministic choice flow.")
+	var strategy_command := _find_command(k_state, MatchCommandScript.USE_SKILL, "k_brainstorm")
+	_expect(not strategy_command.is_empty() and bool(k_state.call("submit_command", strategy_command)), "K Strategy must open its arbitrary strange-card choice.")
+	_expect(String((k_state.get("pending_skill_choice") as Dictionary).get("kind", "")) == "k_strategy_card", "K Strategy must first select one strange card.")
+	var k_player: Dictionary = k_state.call("player", 0) as Dictionary
+	k_player["profession"] = "ambitionist"
+	k_state.players[0] = k_player
+	strategy_policy = k_state.call("skill_usage_policy", 0, "k_brainstorm") as Dictionary
+	_expect(int(strategy_policy.get("remaining_for_profession", -1)) == 1, "K Strategy must have a separate use in the second profession.")
+	_expect(int(strategy_policy.get("remaining_for_profession", -1)) == 1, "Changing profession must preserve a separate displayed profession limit.")
+	var staged_strategy: Dictionary = catalog.call("staged_skill", "k", "k_strategy") as Dictionary
+	k_player = k_state.call("player", 0) as Dictionary
+	k_player["mana"] = int(k_player.get("max_mana", 0))
+	k_state.players[0] = k_player
+	_expect(bool(k_state.call("_can_pay_skill", 0, staged_strategy, "normal")), "K Strategy normal resource payment must be valid with available mana.")
+	var paid: Dictionary = k_state.call("_pay_skill_resources", 0, staged_strategy, "normal") as Dictionary
+	_expect(int(paid.get("mana", 0)) == 2 and int((k_state.call("player", 0) as Dictionary).get("mana", -1)) == 0, "K Strategy normal payment must consume all current mana.")
+	k_player = k_state.call("player", 0) as Dictionary
+	k_player["stamina"] = int(k_player.get("max_stamina", 0))
+	k_player["mana"] = maxi(0, int(k_player.get("max_mana", 0)) - 1)
+	k_state.players[0] = k_player
+	_expect(not bool(k_state.call("_can_pay_skill", 0, staged_strategy, "exhaust")), "Exhaust must be illegal unless both stamina and mana are full.")
+	k_player["mana"] = int(k_player.get("max_mana", 0))
+	k_state.players[0] = k_player
+	_expect(bool(k_state.call("_can_pay_skill", 0, staged_strategy, "exhaust")), "Exhaust must be legal when both resources are full.")
+	var exhaust_paid: Dictionary = k_state.call("_pay_skill_resources", 0, staged_strategy, "exhaust") as Dictionary
+	k_player = k_state.call("player", 0) as Dictionary
+	_expect(int(exhaust_paid.get("stamina", 0)) == int(k_player.get("max_stamina", 0)) and int(exhaust_paid.get("mana", 0)) == int(k_player.get("max_mana", 0)), "Exhaust must pay the character's full stamina and mana values.")
+	_expect(int(k_player.get("stamina", -1)) == 0 and int(k_player.get("mana", -1)) == 0, "Exhaust payment must leave both resources at zero.")
+
+	var maddy_state: RefCounted = _state(["maddy", "q", "ginger", "signal"], 114)
+	for skill_id: String in ["maddy_prospect", "maddy_reclamation"]:
+		var maddy_policy: Dictionary = maddy_state.call("skill_usage_policy", 0, skill_id) as Dictionary
+		_expect(int(maddy_policy.get("uses_per_turn", 0)) == 1, "%s must retain its documented once-per-turn limit." % skill_id)
+	var signal_state: RefCounted = _state(["signal", "q", "ginger", "maddy"], 115)
+	var signal_policy: Dictionary = signal_state.call("skill_usage_policy", 0, "signal_frequency") as Dictionary
+	_expect(int(signal_policy.get("uses_per_turn", 0)) == 1, "Signal Frequency must retain its documented once-per-turn limit.")
+	var q_state: RefCounted = _state(["q", "ginger", "maddy", "signal"], 116)
+	var q_policy: Dictionary = q_state.call("skill_usage_policy", 0, "q_thunder_call") as Dictionary
+	_expect(int(q_policy.get("uses_per_turn", 0)) == 0 and int(q_policy.get("uses_per_profession_per_match", 0)) == 0, "Skills without a documented limit must remain unlimited.")
+
+
+func _test_k_brain_and_ginger_waist() -> void:
+	var k_state: RefCounted = _state(["k", "ginger", "maddy", "signal"], 118)
+	var k: Dictionary = k_state.call("player", 0) as Dictionary
+	k["hand"] = ["rally_new#001"]
+	k["discard"] = ["slash_new#001"]
+	k["common_discard"] = ["slash_new#001"]
+	k["profession_discard"] = []
+	k["last_card_id"] = "slash_new#001"
+	k["armor"] = 0
+	k_state.players[0] = k
+	var brain := _find_command(k_state, MatchCommandScript.USE_SKILL, "k_megamind")
+	_expect(not brain.is_empty() and bool(k_state.call("submit_command", brain)), "K Brain must open its one-card payment request.")
+	var request: Dictionary = k_state.get("pending_skill_discard") as Dictionary
+	var invalid := MatchCommandScript.make(MatchCommandScript.SKILL_DISCARD, 0, {"request_id": request.get("request_id", ""), "card_ids": []})
+	_expect(not bool(k_state.call("submit_command", invalid)), "K Brain must reject a selection that is not exactly one card.")
+	var payment := MatchCommandScript.make(MatchCommandScript.SKILL_DISCARD, 0, {"request_id": request.get("request_id", ""), "card_ids": ["rally_new#001"]})
+	_expect(bool(k_state.call("submit_command", payment)), "K Brain must resolve after exactly one card is discarded.")
+	k = k_state.call("player", 0) as Dictionary
+	_expect((k.get("hand", []) as Array).has("slash_new#001") and not (k.get("discard", []) as Array).has("slash_new#001"), "K Brain's Recursion step must transfer the previous card back to hand without duplicating its instance.")
+	_expect(int((k.get("modifiers", {}) as Dictionary).get("repeat_next_card", 0)) == 1, "K Brain's Echo step must repeat the next card.")
+	_expect(int((k.get("modifiers", {}) as Dictionary).get("free_cast", 0)) == 1, "K Brain's Prayer step must make the next card free.")
+	_expect(bool((k.get("flags", {}) as Dictionary).get("cannot_deal_damage", false)), "K Brain must prevent K from dealing damage for the rest of the turn.")
+	_expect(int(k.get("armor", -1)) == 0, "K Brain must not retain the removed legacy armor effect.")
+	var enemy_before := int((k_state.call("player", 1) as Dictionary).get("health", 0))
+	_expect(int(k_state.call("_deal_damage", 1, 5, "true", 0, false)) == 0, "K Brain must reduce every K-attributed damage instance to zero.")
+	_expect(int((k_state.call("player", 1) as Dictionary).get("health", 0)) == enemy_before, "K Brain damage prevention must leave the target's health unchanged.")
+	var snapshot: Dictionary = k_state.call("deterministic_snapshot") as Dictionary
+	var k_snapshot: Dictionary = (snapshot.get("players", []) as Array)[0] as Dictionary
+	_expect(bool((k_snapshot.get("flags", {}) as Dictionary).get("cannot_deal_damage", false)) and (k_snapshot.get("active_breakthroughs", {}) as Dictionary).is_empty(), "Turn skill flags and breakthrough state must be present in deterministic snapshots.")
+
+	var ai_state: RefCounted = _state(["k", "ginger", "maddy", "signal"], 119)
+	var ai_brain := _find_command(ai_state, MatchCommandScript.USE_SKILL, "k_megamind")
+	ai_state.call("submit_command", ai_brain)
+	var ai := AIControllerScript.new()
+	var ai_payment: Dictionary = ai.call("choose_command", ai_state, 0) as Dictionary
+	_expect(String(ai_payment.get("type", "")) == MatchCommandScript.SKILL_DISCARD and ((ai_payment.get("payload", {}) as Dictionary).get("card_ids", []) as Array).size() == 1, "AI must satisfy count-based skill discard requests.")
+	_expect(bool(ai_state.call("submit_command", ai_payment)), "AI's count-based skill payment must validate.")
+	var replay_state: RefCounted = MatchStateScript.new(rules, catalog, ["k", "ginger", "maddy", "signal"], 119)
+	for replay_command: Dictionary in ai_state.get("command_log") as Array[Dictionary]:
+		_expect(bool(replay_state.call("submit_command", replay_command)), "K Brain replay commands must remain legal.")
+	_expect(replay_state.call("deterministic_snapshot") == ai_state.call("deterministic_snapshot"), "K Brain's count discard and turn modifiers must replay to the same deterministic snapshot.")
+
+	var ginger_state: RefCounted = _state(["ginger", "q", "maddy", "signal"], 120)
+	var ginger: Dictionary = ginger_state.call("player", 0) as Dictionary
+	var target: Dictionary = ginger_state.call("player", 1) as Dictionary
+	ginger["health"] = 8
+	ginger["hand"] = ["slash_new#001"]
+	ginger["position"] = Vector2i(2, 2)
+	target["health"] = 5
+	target["max_health"] = 10
+	target["position"] = Vector2i(3, 2)
+	target["hand"] = []
+	ginger_state.players[0] = ginger
+	ginger_state.players[1] = target
+	var attack := _find_command(ginger_state, MatchCommandScript.PLAY_CARD, "slash_new#001")
+	_expect(not attack.is_empty() and bool(ginger_state.call("submit_command", attack)), "Ginger must be able to attack an adjacent half-health target.")
+	_expect(int((ginger_state.call("player", 1) as Dictionary).get("health", 0)) == 3, "Ginger's half-health bonus must be applied exactly once.")
+	_expect(int((ginger_state.call("player", 0) as Dictionary).get("health", 0)) == 6, "Ginger Waist must lose exactly two health after damaging a lower-health target and must not recurse.")
+
+
+func _test_ai_duel_damage_priority() -> void:
+	var state: RefCounted = _state(["q", "ginger", "maddy", "signal"], 117)
+	var q: Dictionary = state.call("player", 0) as Dictionary
+	var ginger: Dictionary = state.call("player", 1) as Dictionary
+	q["position"] = Vector2i(5, 5)
+	q["hand"] = []
+	q["purchased_hand"] = []
+	q["moves_remaining"] = 1
+	ginger["position"] = Vector2i(7, 5)
+	state.players[0] = q
+	state.players[1] = ginger
+	for player_id: int in [2, 3]:
+		var eliminated: Dictionary = state.call("player", player_id) as Dictionary
+		eliminated["alive"] = false
+		eliminated["health"] = 0
+		state.players[player_id] = eliminated
+	var ai: RefCounted = AIControllerScript.new()
+	var command: Dictionary = ai.call("choose_command", state, 0) as Dictionary
+	_expect(String(command.get("type", "")) == MatchCommandScript.USE_SKILL and String((command.get("payload", {}) as Dictionary).get("skill_id", "")) == "q_thunder_call", "AI must prefer an immediately damaging legal command over repositioning in the final duel.")
 
 
 func _test_response_window_resources() -> void:
@@ -86,11 +303,12 @@ func _test_response_window_resources() -> void:
 	var target: Dictionary = state.call("player", 1) as Dictionary
 	source["position"] = Vector2i(2, 2)
 	target["position"] = Vector2i(3, 2)
-	(target.get("hand", []) as Array).append("heavenly_sense")
-	(target.get("hand", []) as Array).append("iron_body")
+	(source.get("hand", []) as Array).append("slash_new#001")
+	(target.get("hand", []) as Array).append("heavenly_sense_new#001")
+	(target.get("hand", []) as Array).append("iron_body_new#001")
 	state.players[0] = source
 	state.players[1] = target
-	var attack: Dictionary = _find_command(state, MatchCommandScript.PLAY_CARD, "slash")
+	var attack: Dictionary = _find_command(state, MatchCommandScript.PLAY_CARD, "slash_new#001")
 	_expect(bool(state.call("submit_command", attack)), "Attack should open a response window.")
 	var legal: Array[Dictionary] = state.call("legal_commands", 1) as Array[Dictionary]
 	var response_ids: Array[String] = []
@@ -98,7 +316,7 @@ func _test_response_window_resources() -> void:
 		var card_id: String = String((command.get("payload", {}) as Dictionary).get("card_id", ""))
 		if not card_id.is_empty():
 			response_ids.append(card_id)
-	_expect(response_ids == ["heavenly_sense"], "Off-turn zero resources must leave only Heavenly Sense for attacks.")
+	_expect(response_ids == ["heavenly_sense_new#001"], "Off-turn zero resources must leave only revised Heavenly Sense for attacks.")
 
 
 func _test_discard_phase_and_replay_continuation() -> void:
@@ -132,10 +350,12 @@ func _test_extra_action_and_round_pressure() -> void:
 	var state: RefCounted = _state(["k", "ginger", "maddy", "signal"], 105)
 	var active: Dictionary = state.call("player", 0) as Dictionary
 	active["actions"] = 2
+	active["hand"] = ["temporal_focus"]
+	active["mana"] = 1
 	state.players[0] = active
-	var command: Dictionary = _find_command(state, MatchCommandScript.USE_SKILL, "k_brainstorm")
-	_expect(bool(state.call("submit_command", command)), "Brainstorm should resolve.")
-	_expect(int((state.call("player", 0) as Dictionary).get("actions", 0)) == 2, "An extra action must offset the skill action cost.")
+	var command: Dictionary = _find_command(state, MatchCommandScript.PLAY_CARD, "temporal_focus")
+	_expect(bool(state.call("submit_command", command)), "Temporal Focus should resolve.")
+	_expect(int((state.call("player", 0) as Dictionary).get("actions", 0)) == 3, "Extra action feedback must still increase the action counter.")
 	state.completed_rounds = 7
 	_expect(not bool(state.get("finished")), "The eighth round must not finish the match.")
 	_expect(int(state.call("_duel_pressure_bonus")) == 2, "Round seven and later must retain +2 single-target pressure.")
@@ -152,10 +372,32 @@ func _test_targeting_and_public_history() -> void:
 	state.players[1] = target
 	var preview: Dictionary = state.call("targeting_preview", 0, MatchCommandScript.PLAY_CARD, "slash") as Dictionary
 	_expect(int(preview.get("range", 0)) == 1, "Slash preview must report distance one.")
+	var staged_preview: Dictionary = state.call("targeting_preview", 0, MatchCommandScript.PLAY_CARD, "slash_new#001") as Dictionary
+	_expect(int(staged_preview.get("range", 0)) == 0 or not staged_preview.get("cells", []).is_empty(), "Targeting preview must resolve staged card instances.")
+	target["position"] = Vector2i(3, 3)
+	state.players[1] = target
+	var diagonal_preview: Dictionary = state.call("targeting_preview", 0, MatchCommandScript.PLAY_CARD, "slash") as Dictionary
+	_expect(diagonal_preview.get("cells", []).has(Vector2i(3, 3)), "Range preview must use square Chebyshev distance.")
+	target["position"] = Vector2i(3, 2)
+	state.players[1] = target
 	var command: Dictionary = _find_command(state, MatchCommandScript.PLAY_CARD, "slash")
 	_expect(bool(state.call("submit_command", command)), "Previewed attack should resolve.")
 	var history: Array = (state.call("player", 0) as Dictionary).get("public_card_history", []) as Array
 	_expect(history.size() == 1 and String((history[0] as Dictionary).get("card_id", "")) == "slash", "Played cards must be publicly recorded.")
+	var ginger_state: RefCounted = _state(["ginger", "q", "maddy", "signal"], 108)
+	var ginger_target: Dictionary = ginger_state.call("player", 1) as Dictionary
+	ginger_target["position"] = Vector2i(3, 2)
+	ginger_target["health"] = 4
+	ginger_target["max_health"] = 8
+	ginger_state.players[1] = ginger_target
+	var ginger_active: Dictionary = ginger_state.call("player", 0) as Dictionary
+	ginger_active["hand"] = ["slash"]
+	ginger_state.players[0] = ginger_active
+	var ginger_attack: Dictionary = _find_command(ginger_state, MatchCommandScript.PLAY_CARD, "slash")
+	_expect(not ginger_attack.is_empty(), "Ginger should have a legal attack for passive boundary test.")
+	if not ginger_attack.is_empty():
+		_expect(bool(ginger_state.call("submit_command", ginger_attack)), "Ginger boundary attack should resolve.")
+		_expect((ginger_state.get("pending_action") as Dictionary).is_empty(), "Ginger attacks at half health must be unanswerable.")
 
 
 func _test_purchased_cards_persist() -> void:
@@ -164,7 +406,7 @@ func _test_purchased_cards_persist() -> void:
 	active["coins"] = 10
 	active["actions"] = 2
 	state.players[0] = active
-	state.set("market", ["slash", "heavy_slash", "precise_thrust"])
+	state.call("set_market_for_testing", ["slash", "heavy_slash", "precise_thrust"] as Array[String])
 	var buy: Dictionary = {}
 	for command: Dictionary in state.call("legal_commands", 0) as Array[Dictionary]:
 		if String(command.get("type", "")) == MatchCommandScript.BUY:
@@ -178,6 +420,105 @@ func _test_purchased_cards_persist() -> void:
 		var end_turn := MatchCommandScript.make(MatchCommandScript.END_TURN, 0)
 		_expect(bool(state.call("submit_command", end_turn)), "Player should be able to end turn with a purchased card reserved.")
 		_expect(((state.call("player", 0) as Dictionary).get("purchased_hand", []) as Array).size() == 1, "Purchased card must persist across turns until played.")
+
+
+func _test_thunderstorm_skill_discard() -> void:
+	var state: RefCounted = _state(["q", "ginger", "maddy", "signal"], 109)
+	var q: Dictionary = state.call("player", 0) as Dictionary
+	var enemy: Dictionary = state.call("player", 1) as Dictionary
+	q["hand"] = ["rally_new#003", "crossfire_new#003"]
+	q["position"] = Vector2i(2, 2)
+	enemy["position"] = Vector2i(3, 2)
+	state.players[0] = q
+	state.players[1] = enemy
+	var thunderstorm := _find_command(state, MatchCommandScript.USE_SKILL, "q_thunderstorm")
+	_expect(not thunderstorm.is_empty(), "Q must expose Thunderstorm as a legal staged skill.")
+	if thunderstorm.is_empty():
+		return
+	_expect(bool(state.call("submit_command", thunderstorm)), "Thunderstorm should open a discard request.")
+	var request: Dictionary = state.get("pending_skill_discard") as Dictionary
+	_expect(int(request.get("required_rank_sum", 0)) == 23, "Thunderstorm discard request must require rank sum 23.")
+	var invalid := MatchCommandScript.make(MatchCommandScript.SKILL_DISCARD, 0, {"request_id": request.get("request_id", ""), "card_ids": ["rally_new#003"]})
+	_expect(not bool(state.call("submit_command", invalid)), "Thunderstorm must reject an incorrect rank sum.")
+	var replay_state: RefCounted = _state(["q", "ginger", "maddy", "signal"], 109)
+	var replay_q: Dictionary = replay_state.call("player", 0) as Dictionary
+	replay_q["hand"] = ["rally_new#003", "crossfire_new#003"]
+	replay_q["position"] = Vector2i(2, 2)
+	replay_state.players[0] = replay_q
+	var replay_enemy: Dictionary = replay_state.call("player", 1) as Dictionary
+	replay_enemy["position"] = Vector2i(3, 2)
+	replay_state.players[1] = replay_enemy
+	var replay_skill := _find_command(replay_state, MatchCommandScript.USE_SKILL, "q_thunderstorm")
+	replay_state.call("submit_command", replay_skill)
+	var pending_a: Dictionary = (state.call("deterministic_snapshot") as Dictionary).get("pending_skill_discard", {}) as Dictionary
+	var pending_b: Dictionary = (replay_state.call("deterministic_snapshot") as Dictionary).get("pending_skill_discard", {}) as Dictionary
+	_expect(int(pending_a.get("player_id", -1)) == int(pending_b.get("player_id", -1)) and String(pending_a.get("skill_id", "")) == String(pending_b.get("skill_id", "")) and int(pending_a.get("required_rank_sum", 0)) == int(pending_b.get("required_rank_sum", 0)) and int(pending_a.get("target_id", -2)) == int(pending_b.get("target_id", -2)), "Same seed and command must produce identical skill discard requests: %s vs %s error=%s command=%s" % [JSON.stringify(pending_a), JSON.stringify(pending_b), String(replay_state.get("last_error")), JSON.stringify(replay_skill)])
+	var valid := MatchCommandScript.make(MatchCommandScript.SKILL_DISCARD, 0, {"request_id": request.get("request_id", ""), "card_ids": ["rally_new#003", "crossfire_new#003"]})
+	_expect(bool(state.call("submit_command", valid)), "Thunderstorm should resolve after a valid rank-sum discard: %s" % String(state.get("last_error")))
+	_expect((state.get("pending_skill_discard") as Dictionary).is_empty(), "Skill discard request must clear after payment.")
+	var enemy_after: Dictionary = state.call("player", 1) as Dictionary
+	_expect(int(enemy_after.get("health", 0)) < int(enemy_after.get("max_health", 0)) and int((enemy_after.get("statuses", {}) as Dictionary).get("paralyze", 0)) > 0, "Thunderstorm must damage and paralyze enemies in its area.")
+	var blocked_state: RefCounted = _state(["q", "ginger", "maddy", "signal"], 110)
+	var blocked_q: Dictionary = blocked_state.call("player", 0) as Dictionary
+	blocked_q["hand"] = ["rally_new#003", "crossfire_new#003"]
+	blocked_state.players[0] = blocked_q
+	var blocked_skill := _find_command(blocked_state, MatchCommandScript.USE_SKILL, "q_thunderstorm")
+	blocked_state.call("submit_command", blocked_skill)
+	blocked_q = blocked_state.call("player", 0) as Dictionary
+	blocked_q["alive"] = false
+	blocked_q["health"] = 0
+	blocked_state.players[0] = blocked_q
+	blocked_state.call("_settle_eliminations", [] as Array[Dictionary])
+	_expect((blocked_state.get("pending_skill_discard") as Dictionary).is_empty(), "A dead skill owner must not leave a blocking skill discard request.")
+	var unavailable_state: RefCounted = _state(["q", "ginger", "maddy", "signal"], 111)
+	var unavailable_q: Dictionary = unavailable_state.call("player", 0) as Dictionary
+	unavailable_q["hand"] = ["slash_new#001"]
+	unavailable_state.players[0] = unavailable_q
+	_expect(_find_command(unavailable_state, MatchCommandScript.USE_SKILL, "q_thunderstorm").is_empty(), "Thunderstorm must not be legal when its discard requirement cannot be paid.")
+
+
+func _test_revised_decks_and_equipment_costs() -> void:
+	var state: RefCounted = _state(["q", "ginger", "maddy", "signal"], 112)
+	for player_id: int in 4:
+		var player_state: Dictionary = state.call("player", player_id) as Dictionary
+		for zone_name: String in ["hand", "common_deck", "profession_deck"]:
+			for card_value: Variant in player_state.get(zone_name, []) as Array:
+				var instance_id := String(card_value)
+				_expect(instance_id.contains("#") and String(catalog.call("logical_card_id", instance_id)).ends_with("_new"), "%s must contain revised card instances only." % zone_name)
+	for market_value: Variant in state.get("market") as Array:
+		var market_id := String(market_value)
+		_expect(String(catalog.call("logical_card_id", market_id)).ends_with("_new"), "Market must contain revised card instances only.")
+
+	var same_seed: RefCounted = _state(["q", "ginger", "maddy", "signal"], 112)
+	var other_seed: RefCounted = _state(["q", "ginger", "maddy", "signal"], 113)
+	var common_deck: Array = (state.call("player", 0) as Dictionary).get("common_deck", []) as Array
+	var same_deck: Array = (same_seed.call("player", 0) as Dictionary).get("common_deck", []) as Array
+	var other_deck: Array = (other_seed.call("player", 0) as Dictionary).get("common_deck", []) as Array
+	_expect(common_deck == same_deck, "The same match seed must reproduce the revised deck order.")
+	_expect(common_deck != other_deck, "Different match seeds must produce different revised deck orders.")
+	var logical_names: Dictionary = {}
+	var transitions := 0
+	var previous_name := ""
+	for card_value: Variant in common_deck:
+		var logical_name := String(catalog.call("logical_card_id", String(card_value)))
+		logical_names[logical_name] = true
+		if not previous_name.is_empty() and logical_name != previous_name:
+			transitions += 1
+		previous_name = logical_name
+	_expect(transitions > logical_names.size(), "The shuffled deck must interleave names instead of exhausting one name group at a time.")
+
+	var q: Dictionary = state.call("player", 0) as Dictionary
+	q["hand"] = ["crowbar_new#001"]
+	q["purchased_hand"] = []
+	q["stamina"] = 0
+	q["mana"] = 0
+	state.players[0] = q
+	_expect(_find_command(state, MatchCommandScript.PLAY_CARD, "crowbar_new#001").is_empty(), "A weapon must be illegal without its stamina cost.")
+	q["stamina"] = 1
+	state.players[0] = q
+	var equip_command := _find_command(state, MatchCommandScript.PLAY_CARD, "crowbar_new#001")
+	_expect(not equip_command.is_empty() and bool(state.call("submit_command", equip_command)), "A weapon must be playable when its stamina cost can be paid.")
+	_expect(int((state.call("player", 0) as Dictionary).get("stamina", -1)) == 0, "Equipping a weapon must spend one stamina.")
 
 
 func _state(roster: Array[String], seed: int) -> RefCounted:

@@ -8,10 +8,26 @@ func choose_command(state: RefCounted, actor_id: int) -> Dictionary:
 	var commands: Array[Dictionary] = state.call("legal_commands", actor_id) as Array[Dictionary]
 	if commands.is_empty():
 		return {}
+	var actor: Dictionary = state.call("player", actor_id) as Dictionary
+	var alive_count := 0
+	for player_value: Variant in state.get("players") as Array:
+		if bool((player_value as Dictionary).get("alive", false)):
+			alive_count += 1
+	# The third decision is simulation-only pressure for a final duel. It keeps
+	# the AI from ending repeated two-player turns while an attack is available.
+	var decision_budget := 3 if alive_count == 2 else 2
+	if int(actor.get("turn_commands", 0)) >= decision_budget:
+		for command: Dictionary in commands:
+			if String(command.get("type", "")) == MatchCommandScript.END_TURN:
+				return command
 	if String(commands[0].get("type", "")) == MatchCommandScript.SWITCH_PROFESSION:
-		return commands[0]
+		return _choose_profession_command(state, commands)
 	if String(commands[0].get("type", "")) == MatchCommandScript.DISCARD_CARDS:
 		return _choose_discard_command(state, actor_id, commands[0].get("payload", {}) as Dictionary)
+	if String(commands[0].get("type", "")) == MatchCommandScript.SKILL_DISCARD:
+		return _choose_skill_discard_command(state, actor_id, commands[0].get("payload", {}) as Dictionary)
+	if String(commands[0].get("type", "")) == MatchCommandScript.SKILL_CHOICE:
+		return commands[0].duplicate(true)
 	var persona: String = String((state.call("player", actor_id) as Dictionary).get("ai_persona", "control"))
 	var best_command: Dictionary = commands[0]
 	var best_score: float = -1000000.0
@@ -44,6 +60,34 @@ func _score_command(state: RefCounted, actor_id: int, command: Dictionary, perso
 	return -1000.0
 
 
+func _choose_profession_command(state: RefCounted, commands: Array[Dictionary]) -> Dictionary:
+	var alive_count := 0
+	for player_value: Variant in state.get("players") as Array:
+		if bool((player_value as Dictionary).get("alive", false)):
+			alive_count += 1
+	# This is a deck-selection heuristic, not a rule change. Staged profession
+	# decks differ greatly in how many effects have been implemented so far.
+	var duel_priority := {
+		"shooter": 40.0,
+		"arcanist": 32.0,
+		"berserker": 28.0,
+		"assassin": 22.0,
+		"guardian": 12.0,
+		"ambitionist": 6.0,
+		"adventurer": -18.0,
+		"": 0.0
+	}
+	var best_command: Dictionary = commands[0]
+	var best_score := -100000.0
+	for command: Dictionary in commands:
+		var profession := String((command.get("payload", {}) as Dictionary).get("profession", ""))
+		var score := float(duel_priority.get(profession, 0.0)) if alive_count == 2 else 0.0
+		if score > best_score:
+			best_score = score
+			best_command = command
+	return best_command.duplicate(true)
+
+
 func _choose_discard_command(state: RefCounted, actor_id: int, payload: Dictionary) -> Dictionary:
 	var required_count: int = int(payload.get("required_count", 0))
 	var hand: Array = (state.call("player", actor_id) as Dictionary).get("hand", []) as Array
@@ -51,7 +95,7 @@ func _choose_discard_command(state: RefCounted, actor_id: int, payload: Dictiona
 	var catalog: RefCounted = state.get("catalog") as RefCounted
 	for index: int in hand.size():
 		var card_id: String = String(hand[index])
-		var definition: Dictionary = catalog.call("card", card_id) as Dictionary
+		var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
 		var score: float = float(definition.get("price", 0))
 		if String(definition.get("category", "")) == "equipment":
 			score += 4.0
@@ -70,6 +114,45 @@ func _choose_discard_command(state: RefCounted, actor_id: int, payload: Dictiona
 		"request_id": String(payload.get("request_id", "")),
 		"card_ids": selected
 	})
+
+
+func _choose_skill_discard_command(state: RefCounted, actor_id: int, payload: Dictionary) -> Dictionary:
+	var hand: Array = (state.call("player", actor_id) as Dictionary).get("hand", []) as Array
+	if String(payload.get("selection_mode", "rank_sum")) == "count":
+		var required_count := int(payload.get("required_count", 0))
+		var selected_by_count: Array[String] = []
+		for card_value: Variant in hand.slice(0, mini(required_count, hand.size())):
+			selected_by_count.append(String(card_value))
+		return MatchCommandScript.make(MatchCommandScript.SKILL_DISCARD, actor_id, {"request_id": String(payload.get("request_id", "")), "card_ids": selected_by_count})
+	var catalog: RefCounted = state.get("catalog") as RefCounted
+	var required_sum := int(payload.get("required_rank_sum", 0))
+	var minimum_count := int(payload.get("minimum_count", 1))
+	var selected: Array[String] = []
+	var found := _find_rank_sum(hand, catalog, required_sum, minimum_count, 0, 0, [], selected, [0])
+	if not found:
+		selected.clear()
+	return MatchCommandScript.make(MatchCommandScript.SKILL_DISCARD, actor_id, {"request_id": String(payload.get("request_id", "")), "card_ids": selected})
+
+
+func _find_rank_sum(hand: Array, catalog: RefCounted, required_sum: int, minimum_count: int, index: int, current_sum: int, current: Array[String], result: Array[String], nodes: Array[int]) -> bool:
+	nodes[0] += 1
+	if nodes[0] > 2048:
+		return false
+	if current_sum == required_sum and current.size() >= minimum_count:
+		result.append_array(current)
+		return true
+	if current_sum >= required_sum or index >= hand.size():
+		return false
+	for next_index: int in range(index, hand.size()):
+		var card_id := String(hand[next_index])
+		var rank := int(catalog.call("staged_instance_rank", card_id))
+		if rank <= 0:
+			continue
+		current.append(card_id)
+		if _find_rank_sum(hand, catalog, required_sum, minimum_count, next_index + 1, current_sum + rank, current, result, nodes):
+			return true
+		current.pop_back()
+	return false
 
 
 func _score_event_choice(state: RefCounted, payload: Dictionary) -> float:
@@ -126,6 +209,12 @@ func _score_move(state: RefCounted, actor_id: int, payload: Dictionary, persona:
 		destination_nearest = mini(destination_nearest, absi(destination.x - target_position.x) + absi(destination.y - target_position.y))
 	var pursuit_weight: float = 8.0 if persona == "offense" else 5.0
 	score += float(current_nearest - destination_nearest) * pursuit_weight
+	var alive_count: int = 0
+	for player_value: Variant in state.get("players") as Array:
+		if bool((player_value as Dictionary).get("alive", false)):
+			alive_count += 1
+	if alive_count <= 3:
+		score += 48.0 - float(destination_nearest) * 2.5
 	return score - float(path.size()) * 0.05
 
 
@@ -133,20 +222,33 @@ func _score_definition(state: RefCounted, actor_id: int, payload: Dictionary, is
 	var definition: Dictionary
 	if is_card:
 		var catalog: RefCounted = state.get("catalog") as RefCounted
-		definition = catalog.call("card", String(payload.get("card_id", ""))) as Dictionary
+		definition = catalog.call("resolve_card", String(payload.get("card_id", ""))) as Dictionary
 	else:
 		definition = state.call("_skill_definition", actor_id, String(payload.get("skill_id", ""))) as Dictionary
 	var actor: Dictionary = state.call("player", actor_id) as Dictionary
 	var score: float = 15.0
 	var target_id: int = int(payload.get("target_id", actor_id))
+	var alive_count := 0
+	var has_executable_effect := false
+	var has_damage_effect := false
+	for player_value: Variant in state.get("players") as Array:
+		if bool((player_value as Dictionary).get("alive", false)):
+			alive_count += 1
 	for effect_value: Variant in definition.get("effects", []) as Array:
 		if not effect_value is Dictionary:
 			continue
 		var effect: Dictionary = effect_value as Dictionary
 		var operation: String = String(effect.get("op", ""))
+		# A staged card can be provisional while still having an implemented
+		# effect. Only completely unmapped cards are dead actions for the AI.
+		if operation != "provisional":
+			has_executable_effect = true
 		var amount: float = float(effect.get("amount", effect.get("stacks", 0)))
 		if operation == "damage":
+			has_damage_effect = true
 			score += 22.0 + amount * (9.0 if persona == "offense" else 7.0)
+			if alive_count == 2:
+				score += 40.0
 			if target_id >= 0:
 				var target: Dictionary = state.call("player", target_id) as Dictionary
 				if int(target.get("health", 99)) <= int(amount):
@@ -169,11 +271,18 @@ func _score_definition(state: RefCounted, actor_id: int, payload: Dictionary, is
 			score += amount * 8.0
 		elif operation == "self_damage":
 			score -= amount * 5.0
+	if not has_executable_effect:
+		score -= 70.0
+		if alive_count == 2:
+			score -= 50.0
 	if String(definition.get("category", "")) == "equipment":
-		score += 10.0
-	# Keep the deterministic showcase AI from over-selecting the strongest
-	# burst kits while still making the economy/support characters act on
-	# their distinctive opportunities. This is AI policy, not rule logic.
+		# Equipment with no executable effect should not consume an AI command in a
+		# duel. It remains fully available to human players.
+		score += 10.0 if has_executable_effect else -25.0
+	if alive_count == 2 and has_damage_effect:
+		score += 30.0
+	# Keep simulation opponents from over- or under-selecting the current
+	# showcase kits. This only affects AI policy; player rules are unchanged.
 	var character_id: String = String(actor.get("character_id", ""))
 	match character_id:
 		"q": score -= 8.0

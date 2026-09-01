@@ -4,22 +4,41 @@ extends RefCounted
 const CARD_PATH := "res://rules/cards.json"
 const CHARACTER_PATH := "res://rules/characters.json"
 const EVENT_PATH := "res://rules/events.json"
+const NEW_EVENT_PATH := "res://rules/events_new.json"
+const NEW_CARD_PATH := "res://rules/cards_new.json"
+const NEW_CHARACTER_PATH := "res://rules/characters_new.json"
 const STATUS_PATH := "res://rules/statuses.json"
+const EFFECT_ALIASES_PATH := "res://rules/effect_aliases.json"
 const SUPPORTED_EFFECTS: Array[String] = [
 	"damage", "self_damage", "heal", "armor", "resource", "draw", "draw_target",
 	"status", "remove_status", "cleanse", "coins", "extra_action", "extra_move",
 	"push", "break_armor", "steal_card", "self_discard", "discard_or_damage",
-	"recover_last_card", "reveal_hand", "equip", "negate", "reflect", "modifier"
+	"recover_last_card", "reveal_hand", "equip", "negate", "reflect", "modifier", "provisional"
 ]
 const LAUNCH_STATUS_IDS: Array[String] = ["paralyze", "bleed", "poison", "confusion", "hidden", "scorch"]
 const MODIFIER_IDS: Array[String] = ["free_cast", "echo"]
+const SUIT_IDS: Array[String] = ["none", "hearts", "diamonds", "clubs", "spades"]
+const COLOR_IDS: Array[String] = ["none", "red", "black"]
+const RANK_MIN := 0
+const RANK_MAX := 13
+const EQUIPMENT_COSTS: Dictionary = {
+	"weapon": {"stamina": 1, "mana": 0},
+	"armor": {"stamina": 1, "mana": 0},
+	"accessory": {"stamina": 0, "mana": 1}
+}
 
 var version: int = 1
 var cards: Array[Dictionary] = []
+var card_instances: Array[Dictionary] = []
 var characters: Array[Dictionary] = []
 var events: Array[Dictionary] = []
+var staged_events: Array[Dictionary] = []
+var staged_cards: Array[Dictionary] = []
+var staged_characters: Array[Dictionary] = []
 var statuses: Array[Dictionary] = []
+var effect_aliases: Dictionary = {}
 var cards_by_id: Dictionary = {}
+var cards_by_instance_id: Dictionary = {}
 var characters_by_id: Dictionary = {}
 var statuses_by_id: Dictionary = {}
 var validation_errors: Array[String] = []
@@ -34,7 +53,37 @@ func is_valid() -> bool:
 
 
 func card(card_id: String) -> Dictionary:
-	return cards_by_id.get(card_id, {}) as Dictionary
+	if cards_by_id.has(card_id):
+		return cards_by_id.get(card_id, {}) as Dictionary
+	if cards_by_instance_id.has(card_id):
+		return cards_by_instance_id.get(card_id, {}) as Dictionary
+	return {}
+
+
+func resolve_card(value: String) -> Dictionary:
+	var definition: Dictionary = card(value)
+	if not definition.is_empty():
+		return definition
+	var separator := value.rfind("#")
+	if separator >= 0:
+		return staged_card_instance(value.substr(0, separator), int(value.substr(separator + 1)) - 1)
+	return {}
+
+
+func card_instance(instance_id: String) -> Dictionary:
+	return cards_by_instance_id.get(instance_id, {}) as Dictionary
+
+
+func logical_card_id(value: String) -> String:
+	if cards_by_id.has(value):
+		return value
+	var instance: Dictionary = card_instance(value)
+	if not instance.is_empty():
+		return String(instance.get("card_id", ""))
+	var separator := value.rfind("#")
+	if separator >= 0:
+		return value.substr(0, separator)
+	return ""
 
 
 func character(character_id: String) -> Dictionary:
@@ -45,12 +94,238 @@ func status(status_id: String) -> Dictionary:
 	return statuses_by_id.get(status_id, {}) as Dictionary
 
 
+func provisional_report() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for definition: Dictionary in cards:
+		if bool(definition.get("provisional", false)):
+			result.append({"kind": "card", "id": definition.get("id", ""), "description": definition.get("description", "")})
+	for character_definition: Dictionary in characters:
+		for skill_value: Variant in character_definition.get("skills", []) as Array:
+			if skill_value is Dictionary and bool((skill_value as Dictionary).get("provisional", false)):
+				result.append({"kind": "skill", "id": (skill_value as Dictionary).get("id", ""), "description": (skill_value as Dictionary).get("description", "")})
+	for event_definition: Dictionary in events:
+		if bool(event_definition.get("provisional", false)):
+			result.append({"kind": "event", "id": event_definition.get("id", ""), "description": event_definition.get("description", "")})
+	for card_definition: Dictionary in staged_cards:
+		result.append({"kind": "staged_card", "id": card_definition.get("id", ""), "description": card_definition.get("source_text", "")})
+	for event_definition: Dictionary in staged_events:
+		result.append({"kind": "staged_event", "id": event_definition.get("id", ""), "description": event_definition.get("source_text", "")})
+	for character_definition: Dictionary in staged_characters:
+		result.append({"kind": "staged_character", "id": character_definition.get("id", ""), "description": character_definition.get("name", "")})
+	return result
+
+
+func staged_execution_readiness() -> Dictionary:
+	var ready_ids: Array[String] = []
+	var provisional_ids: Array[String] = []
+	for definition: Dictionary in staged_cards:
+		var has_provisional := false
+		for effect_value: Variant in definition.get("effects", []) as Array:
+			if effect_value is Dictionary and String((effect_value as Dictionary).get("op", "")) == "provisional":
+				has_provisional = true
+				break
+		if has_provisional:
+			provisional_ids.append(String(definition.get("id", "")))
+		else:
+			ready_ids.append(String(definition.get("id", "")))
+	return {"total": staged_cards.size(), "ready_ids": ready_ids, "provisional_ids": provisional_ids}
+
+
+func staged_card_instance(card_id: String, copy_index: int) -> Dictionary:
+	for definition: Dictionary in staged_cards:
+		if String(definition.get("id", "")) != card_id:
+			continue
+		var instances: Array = definition.get("instances", []) as Array
+		if copy_index < 0 or copy_index >= instances.size():
+			return {}
+		var instance: Dictionary = instances[copy_index] as Dictionary
+		var result := definition.duplicate(true)
+		result["card_id"] = card_id
+		result["instance_id"] = "%s#%03d" % [card_id, copy_index + 1]
+		result["description"] = String(definition.get("description", definition.get("source_text", "")))
+		if not result.has("target"):
+			result["target"] = "enemy" if String(result.get("category", "")) == "attack" else "self"
+		if not result.has("range"):
+			result["range"] = 1 if String(result.get("category", "")) == "attack" else 0
+		if card_id == "soul_drain_new" or card_id == "armor_break_new":
+			result["target"] = "enemy"
+			result["range"] = 1
+		result["suit"] = instance.get("suit", "none")
+		result["rank"] = int(instance.get("rank", 0))
+		result["color"] = _color_for_suit(String(result.get("suit", "none")))
+		return result
+	return {}
+
+
+func staged_card_ids_for_profession(profession: String) -> Array[String]:
+	var result: Array[String] = []
+	for definition: Dictionary in staged_cards:
+		if String(definition.get("profession", "")) == profession:
+			result.append(String(definition.get("id", "")))
+	return result
+
+
+func staged_instance_ids_for_card(card_id: String) -> Array[String]:
+	var result: Array[String] = []
+	for definition: Dictionary in staged_cards:
+		if String(definition.get("id", "")) != card_id:
+			continue
+		var instances: Array = definition.get("instances", []) as Array
+		for index: int in instances.size():
+			result.append("%s#%03d" % [card_id, index + 1])
+		break
+	return result
+
+
+func staged_character(character_id: String) -> Dictionary:
+	for definition: Dictionary in staged_characters:
+		if String(definition.get("id", "")) == character_id:
+			return definition
+	return {}
+
+
+func staged_skill(character_id: String, skill_id: String) -> Dictionary:
+	var definition: Dictionary = staged_character(character_id)
+	for skill_value: Variant in definition.get("skills", []) as Array:
+		if skill_value is Dictionary and String((skill_value as Dictionary).get("id", "")) == skill_id:
+			return skill_value as Dictionary
+	return {}
+
+
+func executable_staged_skill(character_id: String, skill_id: String) -> Dictionary:
+	var source: Dictionary = staged_skill(character_id, skill_id)
+	if source.is_empty():
+		return {}
+	var result := source.duplicate(true)
+	result["category"] = "skill"
+	result["cost"] = {"stamina": 0, "mana": 0}
+	result["target"] = "all_enemies_in_range"
+	result["range"] = 2
+	result["effects"] = []
+	if skill_id == "q_thunderstorm":
+		result["effects"] = [{"op": "damage", "amount": 3, "kind": "lightning"}, {"op": "status", "status": "paralyze", "stacks": 1}]
+		result["discard_requirement"] = {"minimum_cards": 1, "rank_sum": 23, "selection": "hand"}
+		result["provisional"] = true
+		result["provisional_notes"] = ["可改点数摸牌后结束回合尚未接入", "范围暂按引擎半径2的方形范围执行"]
+	else:
+		result["effects"] = [{"op": "provisional", "text": String(source.get("source_text", ""))}]
+		result["provisional"] = true
+	return result
+
+
+func staged_instance_ids_for_profession(profession: String) -> Array[String]:
+	var result: Array[String] = []
+	for definition: Dictionary in staged_cards:
+		if String(definition.get("profession", "")) != profession:
+			continue
+		var card_id := String(definition.get("id", ""))
+		var instances: Array = definition.get("instances", []) as Array
+		for index: int in instances.size():
+			result.append("%s#%03d" % [card_id, index + 1])
+	return result
+
+
+func staged_draw_pool_for_profession(profession: String, include_common: bool = true) -> Array[String]:
+	var result: Array[String] = []
+	for definition: Dictionary in staged_cards:
+		var card_profession := String(definition.get("profession", ""))
+		if card_profession != profession and not (include_common and card_profession == "neutral"):
+			continue
+		var card_id := String(definition.get("id", ""))
+		var instances: Array = definition.get("instances", []) as Array
+		for index: int in instances.size():
+			result.append("%s#%03d" % [card_id, index + 1])
+	return result
+
+
+func staged_instance_ids_for_suit(suit: String) -> Array[String]:
+	return _staged_instance_filter("suit", suit)
+
+
+func staged_instance_ids_for_color(color: String) -> Array[String]:
+	return _staged_instance_filter("color", color)
+
+
+func staged_instance_ids_for_rank(rank: int) -> Array[String]:
+	var result: Array[String] = []
+	for definition: Dictionary in staged_cards:
+		var card_id := String(definition.get("id", ""))
+		var instances: Array = definition.get("instances", []) as Array
+		for index: int in instances.size():
+			var instance: Dictionary = instances[index] as Dictionary
+			if int(instance.get("rank", -1)) == rank:
+				result.append("%s#%03d" % [card_id, index + 1])
+	return result
+
+
+func rank_value(rank: int) -> int:
+	return rank
+
+
+func staged_instance_rank(instance_id: String) -> int:
+	var separator := instance_id.rfind("#")
+	if separator < 0:
+		return 0
+	var card_id := instance_id.substr(0, separator)
+	var copy_index := int(instance_id.substr(separator + 1)) - 1
+	var instance: Dictionary = staged_card_instance(card_id, copy_index)
+	return int(instance.get("rank", 0))
+
+
+func staged_rank_sum(instance_ids: Array) -> int:
+	var total := 0
+	for instance_value: Variant in instance_ids:
+		total += staged_instance_rank(String(instance_value))
+	return total
+
+
+func validate_rank_sum_selection(hand_instance_ids: Array, selected_instance_ids: Array, required_sum: int, minimum_count: int = 1) -> String:
+	if selected_instance_ids.size() < minimum_count:
+		return "至少选择%d张牌。" % minimum_count
+	var available: Array = hand_instance_ids.duplicate()
+	for selected_value: Variant in selected_instance_ids:
+		var selected_id := String(selected_value)
+		var index := available.find(selected_id)
+		if index < 0:
+			return "选择的牌不在当前手牌中。"
+		available.remove_at(index)
+	var actual_sum := staged_rank_sum(selected_instance_ids)
+	if actual_sum != required_sum:
+		return "所选牌点数总和必须为%d（当前为%d）。" % [required_sum, actual_sum]
+	return ""
+
+
+func _staged_instance_filter(field: String, expected: String) -> Array[String]:
+	var result: Array[String] = []
+	for definition: Dictionary in staged_cards:
+		var card_id := String(definition.get("id", ""))
+		var instances: Array = definition.get("instances", []) as Array
+		for index: int in instances.size():
+			var instance: Dictionary = instances[index] as Dictionary
+			var value := String(instance.get(field, ""))
+			if field == "color":
+				value = _color_for_suit(String(instance.get("suit", "none")))
+			if value == expected:
+				result.append("%s#%03d" % [card_id, index + 1])
+	return result
+
+
 func market_card_ids() -> Array[String]:
 	var result: Array[String] = []
-	for card_definition: Dictionary in cards:
-		var card_id: String = String(card_definition.get("id", ""))
-		if not card_id.is_empty():
-			result.append(card_id)
+	for card_definition: Dictionary in staged_cards:
+		var card_id := String(card_definition.get("id", ""))
+		if card_id == "tusk_new" or String(card_definition.get("category", "")) == "equipment":
+			continue
+		result.append_array(staged_instance_ids_for_card(card_id))
+	return result
+
+
+func market_card_instance_ids() -> Array[String]:
+	var result: Array[String] = []
+	for instance: Dictionary in card_instances:
+		var instance_id := String(instance.get("instance_id", ""))
+		if not instance_id.is_empty():
+			result.append(instance_id)
 	return result
 
 
@@ -59,18 +334,43 @@ func _load_all() -> void:
 	var character_document: Dictionary = _load_document(CHARACTER_PATH)
 	var event_document: Dictionary = _load_document(EVENT_PATH)
 	var status_document: Dictionary = _load_document(STATUS_PATH)
+	var aliases_document: Dictionary = _load_document(EFFECT_ALIASES_PATH)
 	cards = _dictionary_array(card_document.get("cards", []))
+	_normalize_cards()
 	characters = _dictionary_array(character_document.get("characters", []))
 	events = _dictionary_array(event_document.get("events", []))
+	var new_event_document: Dictionary = _load_document(NEW_EVENT_PATH)
+	staged_events = _dictionary_array(new_event_document.get("events", []))
+	var new_card_document: Dictionary = _load_document(NEW_CARD_PATH)
+	staged_cards = _dictionary_array(new_card_document.get("cards", []))
+	for staged_card: Dictionary in staged_cards:
+		if String(staged_card.get("category", "")) == "equipment":
+			var slot := String(staged_card.get("slot", ""))
+			staged_card["cost"] = (EQUIPMENT_COSTS.get(slot, {"stamina": 1, "mana": 0}) as Dictionary).duplicate()
+		elif not staged_card.has("cost"):
+			staged_card["cost"] = {"stamina": 0, "mana": 0}
+		var staged_cost: Dictionary = staged_card.get("cost", {}) as Dictionary
+		var total_cost := int(staged_cost.get("stamina", 0)) + int(staged_cost.get("mana", 0))
+		staged_card["price"] = 1 if total_cost <= 0 else total_cost
+	var new_character_document: Dictionary = _load_document(NEW_CHARACTER_PATH)
+	staged_characters = _dictionary_array(new_character_document.get("characters", []))
 	statuses = _dictionary_array(status_document.get("statuses", []))
+	effect_aliases = aliases_document.get("aliases", {}) as Dictionary
 	version = maxi(
-		int(card_document.get("version", 1)),
+		int(new_card_document.get("version", 1)),
 		maxi(
-			int(character_document.get("version", 1)),
-			maxi(int(event_document.get("version", 1)), int(status_document.get("version", 1)))
+			int(new_character_document.get("version", 1)),
+			maxi(
+				int(new_event_document.get("version", 1)),
+				maxi(
+					int(card_document.get("version", 1)),
+					maxi(int(character_document.get("version", 1)), maxi(int(event_document.get("version", 1)), int(status_document.get("version", 1))))
+				)
+			)
 		)
 	)
 	_index_definitions(cards, cards_by_id, "card")
+	_build_card_instances()
 	_index_definitions(characters, characters_by_id, "character")
 	_index_definitions(statuses, statuses_by_id, "status")
 	_validate()
@@ -108,6 +408,47 @@ func _index_definitions(definitions: Array[Dictionary], target: Dictionary, kind
 			target[definition_id] = definition
 
 
+func _normalize_cards() -> void:
+	# Older content stores one logical definition per card. Normalize metadata here
+	# so new content can opt into copies without changing the runtime contract.
+	for definition: Dictionary in cards:
+		if not definition.has("suit"):
+			definition["suit"] = "none"
+		if not definition.has("rank"):
+			definition["rank"] = 0
+		if not definition.has("color"):
+			definition["color"] = _color_for_suit(String(definition.get("suit", "none")))
+		if not definition.has("durability"):
+			definition["durability"] = 0
+		if not definition.has("copies"):
+			definition["copies"] = 1
+		if not definition.has("provisional"):
+			definition["provisional"] = false
+
+
+func _build_card_instances() -> void:
+	card_instances.clear()
+	cards_by_instance_id.clear()
+	for definition: Dictionary in cards:
+		var card_id := String(definition.get("id", ""))
+		var copies := maxi(1, int(definition.get("copies", 1)))
+		for copy_index in range(copies):
+			var instance := definition.duplicate(true)
+			var instance_id := "%s#%03d" % [card_id, copy_index + 1]
+			instance["instance_id"] = instance_id
+			instance["card_id"] = card_id
+			card_instances.append(instance)
+			cards_by_instance_id[instance_id] = instance
+
+
+func _color_for_suit(suit: String) -> String:
+	if suit == "hearts" or suit == "diamonds":
+		return "red"
+	if suit == "clubs" or suit == "spades":
+		return "black"
+	return "none"
+
+
 func _validate() -> void:
 	if cards.size() != 80:
 		validation_errors.append("Expected 80 cards, found %d." % cards.size())
@@ -120,18 +461,44 @@ func _validate() -> void:
 	_validate_cards()
 	_validate_characters()
 	_validate_events()
+	_validate_staged_events()
+	_validate_staged_cards()
+	_validate_staged_characters()
 	_validate_statuses()
 
 
 func _validate_cards() -> void:
 	for card_definition: Dictionary in cards:
 		var card_id: String = String(card_definition.get("id", "unknown"))
-		for key: String in ["name_key", "name", "category", "profession", "cost", "price", "target", "range", "effects", "tags", "description"]:
+		for key: String in ["name_key", "name", "category", "profession", "cost", "price", "target", "range", "effects", "tags", "description", "suit", "rank", "color", "durability", "copies", "provisional"]:
 			if not card_definition.has(key):
 				validation_errors.append("Card %s is missing %s." % [card_id, key])
-			_validate_effects(card_definition.get("effects", []), "card %s" % card_id)
-			if String(card_definition.get("category", "")) == "response" and not ["heavenly_sense", "shrug_off"].has(card_id):
-				validation_errors.append("Response card %s is not allowed in v4." % card_id)
+		_validate_card_metadata(card_definition)
+		_validate_effects(card_definition.get("effects", []), "card %s" % card_id)
+		if String(card_definition.get("category", "")) == "response" and not ["heavenly_sense", "shrug_off"].has(card_id):
+			validation_errors.append("Response card %s is not allowed by the legacy compatibility rules." % card_id)
+	if cards_by_instance_id.size() != card_instances.size():
+		validation_errors.append("Card instance IDs must be globally unique.")
+
+
+func _validate_card_metadata(card_definition: Dictionary) -> void:
+	var card_id := String(card_definition.get("id", "unknown"))
+	var suit := String(card_definition.get("suit", ""))
+	var color := String(card_definition.get("color", ""))
+	var rank := int(card_definition.get("rank", -1))
+	var copies := int(card_definition.get("copies", 0))
+	if not SUIT_IDS.has(suit):
+		validation_errors.append("Card %s has invalid suit %s." % [card_id, suit])
+	if not COLOR_IDS.has(color) or color != _color_for_suit(suit):
+		validation_errors.append("Card %s has invalid color %s for suit %s." % [card_id, color, suit])
+	if rank < RANK_MIN or rank > RANK_MAX:
+		validation_errors.append("Card %s has invalid rank %d." % [card_id, rank])
+	if copies < 1:
+		validation_errors.append("Card %s must have at least one copy." % card_id)
+	if int(card_definition.get("durability", 0)) < 0:
+		validation_errors.append("Card %s cannot have negative durability." % card_id)
+	if not card_definition.get("provisional", false) is bool:
+		validation_errors.append("Card %s provisional must be boolean." % card_id)
 
 
 func _validate_characters() -> void:
@@ -193,6 +560,71 @@ func _validate_events() -> void:
 		validation_errors.append("Event categories must be 8 reward / 4 choice / 4 pressure.")
 
 
+func _validate_staged_events() -> void:
+	var seen: Dictionary = {}
+	for event_definition: Dictionary in staged_events:
+		var event_id := String(event_definition.get("id", ""))
+		if event_id.is_empty() or seen.has(event_id):
+			validation_errors.append("Staged event IDs must be non-empty and unique.")
+		seen[event_id] = true
+		for key: String in ["title", "source_text", "effects", "provisional"]:
+			if not event_definition.has(key):
+				validation_errors.append("Staged event %s is missing %s." % [event_id, key])
+		if not bool(event_definition.get("provisional", false)):
+			validation_errors.append("Staged event %s must be marked provisional until mapped." % event_id)
+		_validate_effects(event_definition.get("effects", []), "staged event %s" % event_id)
+
+
+func _validate_staged_cards() -> void:
+	var seen: Dictionary = {}
+	var instance_seen: Dictionary = {}
+	for card_definition: Dictionary in staged_cards:
+		var card_id := String(card_definition.get("id", ""))
+		if card_id.is_empty() or seen.has(card_id):
+			validation_errors.append("Staged card IDs must be non-empty and unique.")
+		seen[card_id] = true
+		for key: String in ["name", "category", "profession", "cost", "source_text", "instances", "effects", "provisional"]:
+			if not card_definition.has(key):
+				validation_errors.append("Staged card %s is missing %s." % [card_id, key])
+		if not bool(card_definition.get("provisional", false)):
+			validation_errors.append("Staged card %s must be marked provisional until mapped." % card_id)
+		if String(card_definition.get("category", "")) == "equipment" and card_definition.get("durability", null) != null and int(card_definition.get("durability", -1)) < 0:
+			validation_errors.append("Staged equipment %s has invalid durability." % card_id)
+		var instances: Array = card_definition.get("instances", []) as Array
+		if instances.is_empty():
+			validation_errors.append("Staged card %s must contain at least one instance." % card_id)
+		for instance_index: int in instances.size():
+			var instance_value: Variant = instances[instance_index]
+			if not instance_value is Dictionary:
+				validation_errors.append("Staged card %s has an invalid instance." % card_id)
+				continue
+			var instance: Dictionary = instance_value as Dictionary
+			var instance_id := "%s#%03d" % [card_id, instance_index + 1]
+			if instance_seen.has(instance_id):
+				validation_errors.append("Staged card instance ID %s is duplicated." % instance_id)
+			instance_seen[instance_id] = true
+			if not SUIT_IDS.has(String(instance.get("suit", ""))) or int(instance.get("rank", -1)) < 1 or int(instance.get("rank", -1)) > 13:
+				validation_errors.append("Staged card %s has invalid suit/rank instance." % card_id)
+		_validate_effects(card_definition.get("effects", []), "staged card %s" % card_id)
+
+
+func _validate_staged_characters() -> void:
+	var seen: Dictionary = {}
+	for definition: Dictionary in staged_characters:
+		var character_id := String(definition.get("id", ""))
+		if character_id.is_empty() or seen.has(character_id):
+			validation_errors.append("Staged character IDs must be non-empty and unique.")
+		seen[character_id] = true
+		for key: String in ["name", "professions", "health", "stamina", "mana", "passive", "skills", "provisional"]:
+			if not definition.has(key):
+				validation_errors.append("Staged character %s is missing %s." % [character_id, key])
+		if not bool(definition.get("provisional", false)):
+			validation_errors.append("Staged character %s must be marked provisional until mapped." % character_id)
+		var skills: Array = definition.get("skills", []) as Array
+		if skills.is_empty():
+			validation_errors.append("Staged character %s must have at least one skill." % character_id)
+
+
 func _validate_statuses() -> void:
 	for status_id: String in LAUNCH_STATUS_IDS:
 		if not statuses_by_id.has(status_id):
@@ -218,6 +650,9 @@ func _validate_effects(effect_values: Variant, owner: String) -> void:
 		var operation: String = String(effect.get("op", ""))
 		if not SUPPORTED_EFFECTS.has(operation):
 			validation_errors.append("%s uses unsupported effect %s." % [owner, operation])
+		elif operation == "provisional":
+			if String(effect.get("alias", effect.get("text", ""))).is_empty():
+				validation_errors.append("%s provisional effect must include alias or text." % owner)
 		elif operation == "status" or operation == "remove_status":
 			var status_id: String = String(effect.get("status", ""))
 			if not statuses_by_id.has(status_id):

@@ -3,4 +3,5 @@
 .import/
 export/
 qa/screenshots/
+docs/source/
 *.tmp

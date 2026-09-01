@@ -1,0 +1,32 @@
+{
+  "version": 6,
+  "events": [
+    {"id":"qingquan_one_move","title":"清泉山人的指导：一招鲜","source_text":"选择一种牌，本回合你使用该牌零消耗。","effects":[{"op":"provisional","text":"选择一种牌并在本回合零消耗。"}],"provisional":true},
+    {"id":"qingquan_many_solutions","title":"清泉山人的指导：多解式","source_text":"本轮可将任意防御牌视为三种基础防御牌使用。","effects":[{"op":"provisional","text":"防御牌转换。"}],"provisional":true},
+    {"id":"qingquan_quick_hands","title":"清泉山人的指导：妙手","source_text":"回合结束时可视为使用一张本回合未使用过的牌。","effects":[{"op":"provisional","text":"回合结束免费使用未用牌。"}],"provisional":true},
+    {"id":"qingquan_gardening","title":"清泉山人的指导：园艺法","source_text":"选择两种牌，本回合可以重铸它们。","effects":[{"op":"provisional","text":"指定两种牌可重铸。"}],"provisional":true},
+    {"id":"guitar_analysis_one_new","title":"木吉他的力量分析之一","source_text":"本回合第一次造成伤害时该伤害加1。","effects":[{"op":"provisional","text":"本回合首次伤害加一。"}],"provisional":true},
+    {"id":"guitar_analysis_two_new","title":"木吉他的力量分析之二","source_text":"立即无消耗使用四张恢复牌中的两张。","effects":[{"op":"provisional","text":"从恢复牌中选择两张免费使用。"}],"provisional":true},
+    {"id":"guitar_analysis_three_new","title":"木吉他的力量分析之三","source_text":"本回合攻击无视防具且无距离限制。","effects":[{"op":"provisional","text":"攻击无视防具和距离。"}],"provisional":true},
+    {"id":"orange_yogurt_rice_new","title":"橘子与酸奶拌饭","source_text":"回复1点生命、体力和法力。","effects":[{"op":"heal","amount":1},{"op":"resource","resource":"stamina","amount":1},{"op":"resource","resource":"mana","amount":1}],"provisional":true},
+    {"id":"madmen_cult_new","title":"疯子教团","source_text":"失去1点体力和法力；有仪式匕首时改为增加生命上限并获得生命。","effects":[{"op":"provisional","text":"资源换取生命，受仪式匕首影响。"}],"provisional":true},
+    {"id":"berserker_wizard","title":"狂极术士","source_text":"弃置至少两张奇异牌后获得等量体力，否则减少体力上限；Z&C改为摸3张。","effects":[{"op":"provisional","text":"按奇异牌弃置数量结算。"}],"provisional":true},
+    {"id":"deep_space_wizard","title":"深空术士","source_text":"摸至少一张牌并失去等量体力；Z&C改为失去生命上限并封锁狂极。","effects":[{"op":"provisional","text":"摸牌换体力，Z&C特例。"}],"provisional":true},
+    {"id":"shengyue_wizard","title":"盛跃术士","source_text":"恢复所有生命，回合结束后失去等量生命。","effects":[{"op":"provisional","text":"延迟生命代价。"}],"provisional":true},
+    {"id":"tianyan_wizard","title":"天衍术士","source_text":"依次摸1至5张牌，摸到重复花色则损失生命上限并失去生命。","effects":[{"op":"provisional","text":"逐张摸牌并检查花色重复。"}],"provisional":true},
+    {"id":"exiled_diviner","title":"被流放的占卜师","source_text":"失去2金币，观看牌堆顶三张牌并获得一种类别的所有牌。","effects":[{"op":"provisional","text":"查看牌堆并按类别获得牌。"}],"provisional":true},
+    {"id":"map_master_new","title":"图师","source_text":"使周围7x7陷阱对你无效。","effects":[{"op":"provisional","text":"区域陷阱免疫。"}],"provisional":true},
+    {"id":"border_patrol","title":"边境巡逻军","source_text":"弃置总计造成伤害大于2的牌，否则受到2点伤害并失去2金币。","effects":[{"op":"provisional","text":"按弃牌伤害总值检查。"}],"provisional":true},
+    {"id":"locust_disaster","title":"蝗虫成灾","source_text":"弃置总计回复生命大于2的牌，否则受到伤害且本回合少摸一张。","effects":[{"op":"provisional","text":"按弃牌回复总值检查。"}],"provisional":true},
+    {"id":"saint_relic","title":"圣人遗体","source_text":"每回合限一次，将所有攻击牌当作TUSK使用。","effects":[{"op":"provisional","text":"攻击牌转为TUSK。"}],"provisional":true},
+    {"id":"pilot_new","title":"飞行员","source_text":"无消耗在5x5范围内移动一次。","effects":[{"op":"extra_move","amount":1}],"provisional":true},
+    {"id":"surge_market_new","title":"防浪涌交易市场","source_text":"可弃置任意张牌并获得等量金币。","effects":[{"op":"provisional","text":"弃牌换金币。"}],"provisional":true},
+    {"id":"alliance_memory_bank","title":"联盟记忆银行","source_text":"失去2金币，本回合获得一名角色的被动技。","effects":[{"op":"provisional","text":"金币换取临时被动。"}],"provisional":true},
+    {"id":"mountain_elder","title":"山中老人","source_text":"弃置所有防御牌和奇异牌后，连续三回合开始时隐匿。","effects":[{"op":"provisional","text":"弃牌后延迟隐匿。"}],"provisional":true},
+    {"id":"mind_reader","title":"读心师","source_text":"展示所有手牌或选择一个技能，本回合无法使用它。","effects":[{"op":"provisional","text":"展示手牌或封锁技能。"}],"provisional":true},
+    {"id":"revolutionary_remnants_new","title":"革命军残部","source_text":"本回合开始时隐匿并额外获得一点体力。","effects":[{"op":"provisional","text":"隐匿并获得体力。"}],"provisional":true},
+    {"id":"drunk_psychotic","title":"醉酒精神病人","source_text":"弃置至多两张牌并展示手牌，同花色时获得临时被动。","effects":[{"op":"provisional","text":"弃牌后检查手牌花色。"}],"provisional":true},
+    {"id":"dark_dungeon","title":"暗黑地牢","source_text":"弃牌摸牌最多三次，按最终手牌类型给予奖励或生命上限惩罚。","effects":[{"op":"provisional","text":"循环弃牌摸牌并检查类型。"}],"provisional":true},
+    {"id":"king_eastward","title":"国王东征","source_text":"满足隐匿或攻击牌条件时，解除隐匿或弃置攻击牌并获得战绝或不退。","effects":[{"op":"provisional","text":"条件式状态和被动奖励。"}],"provisional":true}
+  ]
+}

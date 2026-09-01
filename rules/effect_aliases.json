@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "aliases": {
+    "铠甲护体": {"op": "armor", "provisional": true, "note": "按获得护甲处理，具体叠加语义待新版规则确认。"},
+    "战绝": {"op": "modifier", "modifier": "battle_fervor", "provisional": true},
+    "不退": {"op": "modifier", "modifier": "unyielding", "provisional": true}
+  },
+  "supported_modifiers": ["free_cast", "echo"],
+  "provisional_policy": "未能映射到受支持效果的文本必须保留 provisional=true，并进入 docs/PROVISIONAL_EFFECTS.md。"
+}

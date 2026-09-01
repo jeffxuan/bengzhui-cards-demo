@@ -18,4 +18,4 @@ GODOT_BIN=/Users/jeff.jiang/Desktop/Godot.app/Contents/MacOS/Godot scripts/ci/ve
 
 发布候选版还需运行 10000 局模拟、检查两个平台导出物，并完成 `docs/RELEASE_CHECKLIST.md` 中的真人与真实 Windows 验证。最新本地结果记录在 `docs/VERIFICATION.md`。
 
-当前实现以 `docs/RULES.md` 的 v6 规则合同为准；旧 v2-v5 中途对局不兼容，程序会保留原文件并提示重新开始。公开源码采用 MIT，第三方素材仍以 `THIRD_PARTY_NOTICES.md` 中的原许可证为准。
+当前实现以 `docs/RULES.md` 的 v7 规则合同为准；旧 v2-v6 中途对局不兼容，程序会保留原文件并提示重新开始。K「巨脑」与 Ginger「腰裂」已按新版文本执行；K「奇策」与 Ginger「强攻」仍等待多步选牌界面，因此明确禁用且不会回退到旧版技能效果。公开源码采用 MIT，第三方素材仍以 `THIRD_PARTY_NOTICES.md` 中的原许可证为准。

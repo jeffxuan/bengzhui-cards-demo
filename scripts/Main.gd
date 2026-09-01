@@ -569,6 +569,8 @@ func _rank_label(rank: int) -> String:
 
 
 func _skill_usage_text(policy: Dictionary) -> String:
+	if String(policy.get("skill_type", "")) == "passive":
+		return "自动触发"
 	var limits: Array[String] = []
 	var turn_limit := int(policy.get("uses_per_turn", 0))
 	if turn_limit > 0:
@@ -626,9 +628,11 @@ func _refresh_skills() -> void:
 		var button: Button = Button.new()
 		button.custom_minimum_size.y = 66
 		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		button.text = "%s · %s\n%s · %s\n%s" % [String(usage_policy.get("revised_name", skill.get("name", skill_id))), type_text, usage_text, _range_text(skill), _short_text(String(usage_policy.get("source_text", skill.get("description", ""))), 20)]
+		var availability_text := "%s · 开发中" % usage_text if not bool(usage_policy.get("executable", true)) and String(usage_policy.get("skill_type", "")) != "passive" else usage_text
+		button.text = "%s · %s\n%s · %s\n%s" % [String(usage_policy.get("revised_name", skill.get("name", skill_id))), type_text, availability_text, _range_text(skill), _short_text(String(usage_policy.get("source_text", skill.get("description", ""))), 20)]
 		button.icon = load("res://assets/third_party/lucide/sparkles.svg") as Texture2D
-		button.tooltip_text = "%s · %s\n使用限制：%s\n%s\n新版复杂效果按 provisional 清单逐项接入。" % [String(usage_policy.get("revised_name", skill.get("name", skill_id))), type_text, usage_text, String(usage_policy.get("source_text", skill.get("description", "")))]
+		var blocked_reason := String(usage_policy.get("blocked_reason", ""))
+		button.tooltip_text = "%s · %s\n使用限制：%s\n%s%s" % [String(usage_policy.get("revised_name", skill.get("name", skill_id))), type_text, usage_text, String(usage_policy.get("source_text", skill.get("description", ""))), ("\n暂不可主动使用：%s。" % blocked_reason) if not blocked_reason.is_empty() else ""]
 		button.disabled = not _has_definition_command(legal, MatchCommandScript.USE_SKILL, skill_id)
 		button.pressed.connect(_select_skill.bind(skill_id))
 		skill_box.add_child(button)
@@ -904,10 +908,12 @@ func _refresh_blocking_modal() -> void:
 	var pending_skill_discard: Dictionary = state.get("pending_skill_discard") as Dictionary
 	if not pending_skill_discard.is_empty() and _required_actor_id() == 0:
 		modal_layer.visible = true
+		var selection_mode := String(pending_skill_discard.get("selection_mode", "rank_sum"))
 		var required_sum: int = int(pending_skill_discard.get("required_rank_sum", 0))
 		var minimum_count: int = int(pending_skill_discard.get("minimum_count", 1))
+		var required_count: int = int(pending_skill_discard.get("required_count", 0))
 		modal_title.text = "技能弃牌"
-		modal_description.text = "选择至少%d张牌，点数和必须为%d。当前点数和：%d" % [minimum_count, required_sum, _selected_staged_rank_sum()]
+		modal_description.text = "请选择%d张牌。已选 %d/%d" % [required_count, discard_selected_indices.size(), required_count] if selection_mode == "count" else "选择至少%d张牌，点数和必须为%d。当前点数和：%d" % [minimum_count, required_sum, _selected_staged_rank_sum()]
 		var human_skill: Dictionary = state.call("player", 0) as Dictionary
 		var skill_hand: Array = human_skill.get("hand", []) as Array
 		for index: int in skill_hand.size():
@@ -922,7 +928,7 @@ func _refresh_blocking_modal() -> void:
 			modal_actions.add_child(skill_card_button)
 		var skill_confirm := Button.new()
 		skill_confirm.text = "确认发动"
-		skill_confirm.disabled = _selected_staged_rank_sum() != required_sum or discard_selected_indices.size() < minimum_count
+		skill_confirm.disabled = discard_selected_indices.size() != required_count if selection_mode == "count" else (_selected_staged_rank_sum() != required_sum or discard_selected_indices.size() < minimum_count)
 		skill_confirm.pressed.connect(_confirm_skill_discard)
 		modal_actions.add_child(skill_confirm)
 		return

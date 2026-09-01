@@ -81,6 +81,12 @@ func _choose_discard_command(state: RefCounted, actor_id: int, payload: Dictiona
 
 func _choose_skill_discard_command(state: RefCounted, actor_id: int, payload: Dictionary) -> Dictionary:
 	var hand: Array = (state.call("player", actor_id) as Dictionary).get("hand", []) as Array
+	if String(payload.get("selection_mode", "rank_sum")) == "count":
+		var required_count := int(payload.get("required_count", 0))
+		var selected_by_count: Array[String] = []
+		for card_value: Variant in hand.slice(0, mini(required_count, hand.size())):
+			selected_by_count.append(String(card_value))
+		return MatchCommandScript.make(MatchCommandScript.SKILL_DISCARD, actor_id, {"request_id": String(payload.get("request_id", "")), "card_ids": selected_by_count})
 	var catalog: RefCounted = state.get("catalog") as RefCounted
 	var required_sum := int(payload.get("required_rank_sum", 0))
 	var minimum_count := int(payload.get("minimum_count", 1))

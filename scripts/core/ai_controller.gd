@@ -9,14 +9,19 @@ func choose_command(state: RefCounted, actor_id: int) -> Dictionary:
 	if commands.is_empty():
 		return {}
 	var actor: Dictionary = state.call("player", actor_id) as Dictionary
+	# This is a simulation-only decision budget, not a player action limit.
+	# A free move does not consume the one card/skill/buy decision allowed here.
+	var turn_commands := int(actor.get("turn_commands", 0))
+	var has_free_move := int(actor.get("moves_remaining", 0)) > 0
 	var alive_count := 0
 	for player_value: Variant in state.get("players") as Array:
 		if bool((player_value as Dictionary).get("alive", false)):
 			alive_count += 1
-	# The third decision is simulation-only pressure for a final duel. It keeps
-	# the AI from ending repeated two-player turns while an attack is available.
-	var decision_budget := 3 if alive_count == 2 else 2
-	if int(actor.get("turn_commands", 0)) >= decision_budget:
+	# Duels otherwise accumulate draw/discard commands faster than combat resolves.
+	# This constrains simulation policy only; human players retain unlimited card and skill use.
+	var non_move_limit := 1 if alive_count == 2 else (1 if has_free_move else 2)
+	var non_move_budget_reached := turn_commands >= non_move_limit
+	if non_move_budget_reached:
 		for command: Dictionary in commands:
 			if String(command.get("type", "")) == MatchCommandScript.END_TURN:
 				return command
@@ -27,7 +32,12 @@ func choose_command(state: RefCounted, actor_id: int) -> Dictionary:
 	if String(commands[0].get("type", "")) == MatchCommandScript.SKILL_DISCARD:
 		return _choose_skill_discard_command(state, actor_id, commands[0].get("payload", {}) as Dictionary)
 	if String(commands[0].get("type", "")) == MatchCommandScript.SKILL_CHOICE:
-		return commands[0].duplicate(true)
+		var pending_choice: Dictionary = state.get("pending_skill_choice") as Dictionary
+		if String(pending_choice.get("kind", "")) == "q_thunder_guard_offer":
+			for command: Dictionary in commands:
+				if String((command.get("payload", {}) as Dictionary).get("value", "")) == "skip":
+					return command.duplicate(true)
+		return _choose_skill_choice_command(state, actor_id, commands, pending_choice)
 	var persona: String = String((state.call("player", actor_id) as Dictionary).get("ai_persona", "control"))
 	var best_command: Dictionary = commands[0]
 	var best_score: float = -1000000.0
@@ -86,6 +96,75 @@ func _choose_profession_command(state: RefCounted, commands: Array[Dictionary]) 
 			best_score = score
 			best_command = command
 	return best_command.duplicate(true)
+
+
+func _choose_skill_choice_command(state: RefCounted, actor_id: int, commands: Array[Dictionary], pending_choice: Dictionary) -> Dictionary:
+	var kind := String(pending_choice.get("kind", ""))
+	if kind == "k_strategy_card":
+		var actor: Dictionary = state.call("player", actor_id) as Dictionary
+		var persona := String(actor.get("ai_persona", "control"))
+		var best_command: Dictionary = commands[0]
+		var best_score := -100000.0
+		for command: Dictionary in commands:
+			var card_id := String((command.get("payload", {}) as Dictionary).get("value", ""))
+			var score := _score_definition(state, actor_id, {"card_id": card_id, "target_id": _lowest_health_enemy(state, actor_id)}, true, persona)
+			if int(pending_choice.get("resolution_count", 1)) > 1:
+				var definition: Dictionary = (state.get("catalog") as RefCounted).call("resolve_card", card_id) as Dictionary
+				for effect_value: Variant in definition.get("effects", []) as Array:
+					if effect_value is Dictionary and String((effect_value as Dictionary).get("op", "")) == "draw":
+						score -= float((effect_value as Dictionary).get("amount", 0)) * 14.0
+			if score > best_score:
+				best_score = score
+				best_command = command
+		return best_command.duplicate(true)
+	if kind == "k_strategy_target" or kind == "zc_frenzy_target":
+		var best_target: Dictionary = commands[0]
+		var lowest_health := 100000
+		for command: Dictionary in commands:
+			var target_id := int((command.get("payload", {}) as Dictionary).get("value", -1))
+			var target: Dictionary = state.call("player", target_id) as Dictionary
+			if int(target.get("health", 100000)) < lowest_health:
+				lowest_health = int(target.get("health", 100000))
+				best_target = command
+		return best_target.duplicate(true)
+	if kind == "zc_frenzy_category":
+		var actor: Dictionary = state.call("player", actor_id) as Dictionary
+		var category_counts: Dictionary = {}
+		for zone_name: String in ["hand", "purchased_hand"]:
+			for card_value: Variant in actor.get(zone_name, []) as Array:
+				var definition: Dictionary = (state.get("catalog") as RefCounted).call("resolve_card", String(card_value)) as Dictionary
+				var category := String(definition.get("category", ""))
+				category_counts[category] = int(category_counts.get(category, 0)) + 1
+		var best_category: Dictionary = commands[0]
+		var smallest_count := 100000
+		for command: Dictionary in commands:
+			var category := String((command.get("payload", {}) as Dictionary).get("value", ""))
+			var count := int(category_counts.get(category, 100000))
+			if count < smallest_count:
+				smallest_count = count
+				best_category = command
+		return best_category.duplicate(true)
+	if kind == "maddy_explore_choice":
+		var actor: Dictionary = state.call("player", actor_id) as Dictionary
+		var missing_health := maxi(0, int(actor.get("max_health", 0)) - int(actor.get("health", 0)))
+		var preferred_value := "heal" if missing_health >= 2 else "draw"
+		for command: Dictionary in commands:
+			if String((command.get("payload", {}) as Dictionary).get("value", "")) == preferred_value:
+				return command.duplicate(true)
+	return commands[0].duplicate(true)
+
+
+func _lowest_health_enemy(state: RefCounted, actor_id: int) -> int:
+	var result := -1
+	var lowest_health := 100000
+	for target_id: int in (state.get("players") as Array).size():
+		if target_id == actor_id:
+			continue
+		var target: Dictionary = state.call("player", target_id) as Dictionary
+		if bool(target.get("alive", false)) and int(target.get("health", 100000)) < lowest_health:
+			lowest_health = int(target.get("health", 100000))
+			result = target_id
+	return result
 
 
 func _choose_discard_command(state: RefCounted, actor_id: int, payload: Dictionary) -> Dictionary:
@@ -228,6 +307,18 @@ func _score_definition(state: RefCounted, actor_id: int, payload: Dictionary, is
 	var actor: Dictionary = state.call("player", actor_id) as Dictionary
 	var score: float = 15.0
 	var target_id: int = int(payload.get("target_id", actor_id))
+	if not is_card:
+		var skill_id := String(payload.get("skill_id", ""))
+		var character_id := String(actor.get("character_id", ""))
+		if character_id == "zc" and skill_id in ["zc_madness", "zc_poison_mist", "zc_frenzy"]:
+			# Frenzy is best used to finish a distant weakened opponent, otherwise it
+			# competes with ordinary attacks instead of replacing them every turn.
+			var lowest_enemy_id := _lowest_health_enemy(state, actor_id)
+			var lowest_enemy: Dictionary = state.call("player", lowest_enemy_id) as Dictionary
+			return 62.0 if int(lowest_enemy.get("health", 99)) <= 2 else 36.0
+		if character_id == "k" and skill_id in ["k_brainstorm", "k_strategy"]:
+			# Strategy converts every current hand card into a chosen strange-card resolution.
+			return 48.0 + float((actor.get("hand", []) as Array).size()) * 7.0
 	var alive_count := 0
 	var has_executable_effect := false
 	var has_damage_effect := false
@@ -244,8 +335,10 @@ func _score_definition(state: RefCounted, actor_id: int, payload: Dictionary, is
 		if operation != "provisional":
 			has_executable_effect = true
 		var amount: float = float(effect.get("amount", effect.get("stacks", 0)))
-		if operation == "damage":
+		if operation == "damage" or operation == "damage_missing_health":
 			has_damage_effect = true
+			if operation == "damage_missing_health":
+				amount = mini(float(effect.get("maximum", 4)), float(maxi(0, int(actor.get("max_health", 0)) - int(actor.get("health", 0)))))
 			score += 22.0 + amount * (9.0 if persona == "offense" else 7.0)
 			if alive_count == 2:
 				score += 40.0
@@ -267,12 +360,14 @@ func _score_definition(state: RefCounted, actor_id: int, payload: Dictionary, is
 			score += mini(float(missing_resource), amount) * (6.0 if persona == "resource" else 3.0) if missing_resource > 0 else -18.0
 		elif operation == "draw" or operation == "coins":
 			score += amount * (6.0 if persona == "resource" else 3.0)
-		elif operation == "extra_action" or operation == "extra_move":
+		elif operation == "extra_move":
 			score += amount * 8.0
+		elif operation == "steal_card":
+			score += amount * 18.0
 		elif operation == "self_damage":
 			score -= amount * 5.0
 	if not has_executable_effect:
-		score -= 70.0
+		score -= 160.0
 		if alive_count == 2:
 			score -= 50.0
 	if String(definition.get("category", "")) == "equipment":
@@ -281,12 +376,4 @@ func _score_definition(state: RefCounted, actor_id: int, payload: Dictionary, is
 		score += 10.0 if has_executable_effect else -25.0
 	if alive_count == 2 and has_damage_effect:
 		score += 30.0
-	# Keep simulation opponents from over- or under-selecting the current
-	# showcase kits. This only affects AI policy; player rules are unchanged.
-	var character_id: String = String(actor.get("character_id", ""))
-	match character_id:
-		"q": score -= 8.0
-		"k": score -= 10.0
-		"na1": score += 7.0
-		"signal": score += 7.0
 	return score

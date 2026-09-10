@@ -34,6 +34,7 @@ var ui_font: Font
 var selected_character_id: String = "q"
 var selected_target_commands: Array[Dictionary] = []
 var move_commands: Dictionary = {}
+var selected_move_key: String = ""
 var log_lines: Array[String] = []
 var ai_running: bool = false
 var settings_open: bool = false
@@ -48,6 +49,7 @@ var summary_label: Label
 var action_hint_label: Label
 var resources_box: GridContainer
 var status_box: HFlowContainer
+var equipment_box: VBoxContainer
 var skill_box: VBoxContainer
 var market_box: VBoxContainer
 var opponents_box: VBoxContainer
@@ -359,6 +361,11 @@ func _build_left_sidebar() -> Control:
 	status_box.add_theme_constant_override("v_separation", 4)
 	box.add_child(status_box)
 	box.add_child(HSeparator.new())
+	box.add_child(_section_label("装备栏"))
+	equipment_box = VBoxContainer.new()
+	equipment_box.add_theme_constant_override("separation", 5)
+	box.add_child(equipment_box)
+	box.add_child(HSeparator.new())
 	box.add_child(_section_label("角色技能"))
 	skill_box = VBoxContainer.new()
 	skill_box.add_theme_constant_override("separation", 8)
@@ -452,6 +459,7 @@ func _refresh_match_ui() -> void:
 	summary_label.text = String(state.call("summary"))
 	_refresh_resources()
 	_refresh_statuses()
+	_refresh_equipment()
 	_refresh_opponents()
 	_refresh_hand()
 	_refresh_skills()
@@ -498,9 +506,36 @@ func _refresh_statuses() -> void:
 		var modifier_name: String = "祈祷" if modifier_id == "free_cast" else "回声"
 		var modifier_description: String = "下一张牌费用为0。" if modifier_id == "free_cast" else "下一张伤害牌额外造成1点伤害。"
 		status_box.add_child(_status_chip("res://assets/third_party/lucide/sparkles.svg", modifier_name, modifier_description, COLORS["gold"] as Color))
+	if int(human.get("flash", 0)) > 0:
+		status_box.add_child(_status_chip("res://assets/third_party/lucide/sparkles.svg", "闪光 ×%d" % int(human.get("flash", 0)), "免疫混乱；每回合第一张攻击牌伤害+1，且不获得隐匿攻击增益。", COLORS["gold"] as Color))
 	if status_box.get_child_count() == 0:
 		var empty_label: Label = _label("无状态效果", 13, COLORS["muted"] as Color)
 		status_box.add_child(empty_label)
+
+
+func _refresh_equipment() -> void:
+	_clear_children(equipment_box)
+	var human: Dictionary = state.call("player", 0) as Dictionary
+	var equipment: Dictionary = human.get("equipment", {}) as Dictionary
+	var durability: Dictionary = human.get("equipment_durability", {}) as Dictionary
+	for slot: String in ["weapon", "armor", "accessory"]:
+		var slot_name := {"weapon": "武器", "armor": "防具", "accessory": "饰品"}.get(slot, slot) as String
+		var card_id := String(equipment.get(slot, ""))
+		var row := Button.new()
+		row.custom_minimum_size.y = 42
+		row.disabled = true
+		if card_id.is_empty():
+			row.text = "%s · 空" % slot_name
+		else:
+			var definition: Dictionary = state.call("equipped_definition", 0, slot) as Dictionary
+			var durability_state: Dictionary = durability.get(slot, {}) as Dictionary
+			var current := int(durability_state.get("current", -1))
+			var maximum := int(durability_state.get("maximum", -1))
+			var durability_text := "耐久 ∞" if maximum < 0 else "耐久 %d/%d" % [current, maximum]
+			var badge := _card_identity_badge(definition)
+			row.text = "%s · %s%s\n%s" % [slot_name, (badge + " · ") if not badge.is_empty() else "", String(definition.get("name", card_id)), durability_text]
+			row.tooltip_text = "%s\n%s\n%s" % [_card_identity_text(definition), durability_text, String(definition.get("source_text", definition.get("description", "")))]
+		equipment_box.add_child(row)
 
 
 func _refresh_opponents() -> void:
@@ -510,7 +545,8 @@ func _refresh_opponents() -> void:
 		var row: Button = Button.new()
 		row.custom_minimum_size.y = 52
 		var status_color: Color = COLORS["muted"] as Color if bool(opponent.get("alive", false)) else COLORS["danger"] as Color
-		row.text = "%s\nHP %d/%d · 护 %d · 手牌 %d" % [String(opponent.get("name", "")), int(opponent.get("health", 0)), int(opponent.get("max_health", 0)), int(opponent.get("armor", 0)), (opponent.get("hand", []) as Array).size() + (opponent.get("purchased_hand", []) as Array).size()]
+		var flash_text := " · 闪光 %d" % int(opponent.get("flash", 0)) if int(opponent.get("flash", 0)) > 0 else ""
+		row.text = "%s\nHP %d/%d · 护 %d · 手牌 %d%s" % [String(opponent.get("name", "")), int(opponent.get("health", 0)), int(opponent.get("max_health", 0)), int(opponent.get("armor", 0)), (opponent.get("hand", []) as Array).size() + (opponent.get("purchased_hand", []) as Array).size(), flash_text]
 		row.modulate = status_color
 		row.tooltip_text = "点击查看最近5张公开出牌"
 		row.pressed.connect(_show_player_history.bind(player_id))
@@ -534,10 +570,12 @@ func _refresh_hand() -> void:
 		var source_label: String = " · 商店保留" if card_index >= display_hand.size() - purchased_count else ""
 		var identity_badge := _card_identity_badge(definition)
 		var identity_prefix := "%s · " % identity_badge if not identity_badge.is_empty() else "旧版牌 · "
-		button.text = "%s%s%s\n%s · %s" % [identity_prefix, String(definition.get("name", card_id)), source_label, _cost_text(definition), _range_text(definition)]
+		button.text = "%s%s%s\n%s · %s" % [identity_prefix, String(definition.get("name", card_id)), source_label, _cost_text(definition), _range_text(definition, 0)]
 		button.icon = _category_icon(String(definition.get("category", "")))
-		button.tooltip_text = "%s\n%s\n%s · %s\n%s" % [String(definition.get("name", card_id)), _card_identity_text(definition), _cost_text(definition), _range_text(definition), String(definition.get("description", ""))]
-		button.disabled = not _has_definition_command(legal, MatchCommandScript.PLAY_CARD, card_id)
+		button.tooltip_text = "%s\n%s\n%s · %s\n%s" % [String(definition.get("name", card_id)), _card_identity_text(definition), _cost_text(definition), _range_text(definition, 0), String(definition.get("description", ""))]
+		var playable := _has_definition_command(legal, MatchCommandScript.PLAY_CARD, card_id)
+		var range_preview_available := String(definition.get("category", "")) == "attack" and _required_actor_id() == 0
+		button.disabled = not playable and not range_preview_available
 		button.pressed.connect(_select_card.bind(card_id))
 		hand_box.add_child(button)
 
@@ -616,29 +654,48 @@ func _refresh_skills() -> void:
 		keep.text = "保持%s" % _profession_name(String(human.get("profession", "")))
 		keep.pressed.connect(_submit_profession_choice.bind(""))
 		skill_box.add_child(keep)
-		if String(human.get("character_id", "")) == "q":
-			var thunder_guard := Button.new()
-			thunder_guard.text = "发动雷佑（替代本回合摸牌）"
-			thunder_guard.tooltip_text = "展示牌堆顶6张，获得其中一种类别的全部牌；其余牌按原顺序放回。"
-			thunder_guard.pressed.connect(_select_skill.bind("q_thunder_guard"))
-			skill_box.add_child(thunder_guard)
 		if first_choice == null:
 			first_choice = keep
 		first_choice.grab_focus.call_deferred()
 		return
 	var character_definition: Dictionary = catalog.call("character", String(human.get("character_id", ""))) as Dictionary
+	var staged_character: Dictionary = catalog.call("staged_character", String(human.get("character_id", ""))) as Dictionary
+	var passive: Dictionary = staged_character.get("passive", {}) as Dictionary
+	if not passive.is_empty():
+		var passive_button := Button.new()
+		passive_button.custom_minimum_size.y = 58
+		passive_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		var passive_id := String(passive.get("id", ""))
+		var passive_name := String(passive.get("name", {"q_thunder_blessing": "雷霆祝福", "shya_flash": "闪佑", "ginger_fist": "拳道", "zc_insect": "虫刻"}.get(passive_id, (character_definition.get("passive", {}) as Dictionary).get("name", "被动"))))
+		passive_button.text = "%s · 被动技\n%s" % [passive_name, _short_text(String(passive.get("source_text", "")), 28)]
+		passive_button.tooltip_text = String(passive.get("source_text", ""))
+		passive_button.disabled = true
+		skill_box.add_child(passive_button)
+	if String(human.get("character_id", "")) == "q":
+		var thunder_guard_info := Button.new()
+		thunder_guard_info.custom_minimum_size.y = 58
+		thunder_guard_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		thunder_guard_info.text = "雷佑 · 摸牌后可选\n正常摸牌完成后询问是否发动"
+		thunder_guard_info.tooltip_text = String((catalog.call("staged_skill", "q", "q_thunder_guard") as Dictionary).get("source_text", ""))
+		thunder_guard_info.disabled = true
+		skill_box.add_child(thunder_guard_info)
 	var legal: Array[Dictionary] = state.call("legal_commands", 0) as Array[Dictionary]
+	var displayed_revised_skills: Dictionary = {}
 	for skill_value: Variant in character_definition.get("skills", []) as Array:
 		var skill: Dictionary = skill_value as Dictionary
 		var skill_id: String = String(skill.get("id", ""))
 		var usage_policy: Dictionary = state.call("skill_usage_policy", 0, skill_id) as Dictionary
+		var revised_skill_id := String(usage_policy.get("revised_skill_id", skill_id))
+		if revised_skill_id == "q_thunder_guard" or revised_skill_id == "q_thunderstorm" or displayed_revised_skills.has(revised_skill_id):
+			continue
+		displayed_revised_skills[revised_skill_id] = true
 		var usage_text := _skill_usage_text(usage_policy)
 		var type_text := _skill_type_text(usage_policy)
 		var button: Button = Button.new()
 		button.custom_minimum_size.y = 66
 		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		var availability_text := "%s · 开发中" % usage_text if not bool(usage_policy.get("executable", true)) and String(usage_policy.get("skill_type", "")) != "passive" else usage_text
-		button.text = "%s · %s\n%s · %s\n%s" % [String(usage_policy.get("revised_name", skill.get("name", skill_id))), type_text, availability_text, _range_text(skill), _short_text(String(usage_policy.get("source_text", skill.get("description", ""))), 20)]
+		button.text = "%s · %s\n%s · %s\n%s" % [String(usage_policy.get("revised_name", skill.get("name", skill_id))), type_text, availability_text, _range_text(skill, 0), _short_text(String(usage_policy.get("source_text", skill.get("description", ""))), 20)]
 		button.icon = load("res://assets/third_party/lucide/sparkles.svg") as Texture2D
 		var blocked_reason := String(usage_policy.get("blocked_reason", ""))
 		button.tooltip_text = "%s · %s\n使用限制：%s\n%s%s" % [String(usage_policy.get("revised_name", skill.get("name", skill_id))), type_text, usage_text, String(usage_policy.get("source_text", skill.get("description", ""))), ("\n暂不可主动使用：%s。" % blocked_reason) if not blocked_reason.is_empty() else ""]
@@ -651,7 +708,7 @@ func _refresh_skills() -> void:
 		staged_button.custom_minimum_size.y = 66
 		staged_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		var staged_usage := _skill_usage_text(state.call("skill_usage_policy", 0, "q_thunderstorm") as Dictionary)
-		staged_button.text = "%s · %s\n弃牌点数和23 · %s\n暂存技能（provisional）" % [String(staged_thunderstorm.get("name", "雷暴")), staged_usage, _range_text(staged_thunderstorm)]
+		staged_button.text = "%s · %s\n弃牌点数和23 · %s\n暂存技能（provisional）" % [String(staged_thunderstorm.get("name", "雷暴")), staged_usage, _range_text(staged_thunderstorm, 0)]
 		staged_button.icon = load("res://assets/third_party/lucide/sparkles.svg") as Texture2D
 		var thunderstorm_available := _has_definition_command(legal, MatchCommandScript.USE_SKILL, "q_thunderstorm")
 		staged_button.tooltip_text = String(staged_thunderstorm.get("source_text", staged_thunderstorm.get("description", ""))) if thunderstorm_available else "%s\n当前手牌无法凑出点数和 23。" % String(staged_thunderstorm.get("source_text", staged_thunderstorm.get("description", "")))
@@ -702,6 +759,16 @@ func _refresh_interactions() -> void:
 			if target_id >= 0 and not legal_targets.has(target_id):
 				legal_targets.append(target_id)
 	board_view.set_interactions(move_commands, legal_targets)
+	if selected_move_key.is_empty() or not move_commands.has(selected_move_key):
+		selected_move_key = ""
+		board_view.set_move_path([])
+	else:
+		var selected_path: Array = ((move_commands[selected_move_key] as Dictionary).get("payload", {}) as Dictionary).get("path", []) as Array
+		var selected_cells: Array[Vector2i] = []
+		for step_value: Variant in selected_path:
+			var step: Array = step_value as Array
+			selected_cells.append(Vector2i(int(step[0]), int(step[1])))
+		board_view.set_move_path(selected_cells)
 	if selected_target_commands.is_empty():
 		board_view.set_range_preview([])
 	else:
@@ -716,10 +783,23 @@ func _refresh_interactions() -> void:
 
 
 func _select_card(card_id: String) -> void:
+	selected_move_key = ""
+	board_view.set_move_path([])
 	_select_definition_commands(MatchCommandScript.PLAY_CARD, "card_id", card_id)
+	if selected_target_commands.is_empty():
+		var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
+		if String(definition.get("category", "")) == "attack":
+			var preview: Dictionary = state.call("targeting_preview", 0, MatchCommandScript.PLAY_CARD, card_id) as Dictionary
+			board_view.set_range_preview(preview.get("cells", []) as Array[Vector2i])
+			if (preview.get("legal_target_ids", []) as Array).is_empty():
+				action_hint_label.text = "攻击范围内没有合法目标"
+			elif not bool(state.call("_can_pay", 0, definition)):
+				action_hint_label.text = "体力或法力不足"
 
 
 func _select_skill(skill_id: String) -> void:
+	selected_move_key = ""
+	board_view.set_move_path([])
 	_select_definition_commands(MatchCommandScript.USE_SKILL, "skill_id", skill_id)
 
 
@@ -748,7 +828,21 @@ func _on_board_cell_selected(position: Vector2i) -> void:
 		return
 	var key: String = "%d:%d" % [position.x, position.y]
 	if move_commands.has(key):
-		_submit_human_command(move_commands[key] as Dictionary)
+		if selected_move_key == key:
+			_submit_human_command(move_commands[key] as Dictionary)
+			return
+		selected_move_key = key
+		var path: Array = (((move_commands[key] as Dictionary).get("payload", {}) as Dictionary).get("path", []) as Array)
+		var path_cells: Array[Vector2i] = []
+		var trap_count := 0
+		for step_value: Variant in path:
+			var step: Array = step_value as Array
+			var cell := Vector2i(int(step[0]), int(step[1]))
+			path_cells.append(cell)
+			if String(state.call("tile_kind", cell)) == "trap":
+				trap_count += 1
+		board_view.set_move_path(path_cells)
+		action_hint_label.text = "路径 %d 格%s · 再次点击终点确认移动" % [path_cells.size(), " · 经过%d个陷阱" % trap_count if trap_count > 0 else ""]
 
 
 func _on_board_player_selected(player_id: int) -> void:
@@ -776,6 +870,8 @@ func _submit_end_turn() -> void:
 
 func _submit_human_command(command: Dictionary) -> void:
 	selected_target_commands.clear()
+	selected_move_key = ""
+	board_view.set_move_path([])
 	if not bool(state.call("submit_command", command)):
 		log_lines.append("[color=#e2706a]%s[/color]" % String(state.get("last_error")))
 	_collect_events()
@@ -909,7 +1005,11 @@ func _build_modal_layer() -> void:
 	box.add_child(modal_description)
 	modal_actions = VBoxContainer.new()
 	modal_actions.add_theme_constant_override("separation", 8)
-	box.add_child(modal_actions)
+	var action_scroll := ScrollContainer.new()
+	action_scroll.custom_minimum_size = Vector2(500, 220)
+	action_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	action_scroll.add_child(modal_actions)
+	box.add_child(action_scroll)
 
 
 func _refresh_blocking_modal() -> void:
@@ -919,23 +1019,64 @@ func _refresh_blocking_modal() -> void:
 	var pending_discard: Dictionary = state.get("pending_discard") as Dictionary
 	var pending_skill_discard: Dictionary = state.get("pending_skill_discard") as Dictionary
 	var pending_skill_choice: Dictionary = state.get("pending_skill_choice") as Dictionary
+	if bool(state.get("profession_choice_pending")) and _required_actor_id() == 0:
+		modal_layer.visible = true
+		var human: Dictionary = state.call("player", 0) as Dictionary
+		modal_title.text = "选择本回合职业"
+		modal_description.text = "保持当前职业可正常摸牌；转换职业后本回合少摸1张牌。"
+		for command: Dictionary in state.call("legal_commands", 0) as Array[Dictionary]:
+			if String(command.get("type", "")) != MatchCommandScript.SWITCH_PROFESSION:
+				continue
+			var profession_id := String((command.get("payload", {}) as Dictionary).get("profession", ""))
+			var button := Button.new()
+			button.text = "保持%s" % _profession_name(String(human.get("profession", ""))) if profession_id.is_empty() else "转换为%s" % _profession_name(profession_id)
+			button.pressed.connect(_submit_human_command.bind(command))
+			modal_actions.add_child(button)
+		return
 	if not pending_skill_choice.is_empty() and _required_actor_id() == 0:
 		modal_layer.visible = true
 		var skill_id := String(pending_skill_choice.get("skill_id", ""))
 		var kind := String(pending_skill_choice.get("kind", ""))
-		modal_title.text = "技能选择"
-		modal_description.text = "【%s】%s" % [skill_id, {"q_thunder_guard_category": "选择获得的牌类别", "q_thunderstorm_rank": "选择新的点数", "k_strategy_card": "选择视为使用的奇异牌", "k_strategy_target": "选择目标", "ginger_power_target": "选择舍身突击目标", "ginger_power_reward": "选择追加效果"}.get(kind, "请选择")]
+		modal_title.text = "结算选择"
+		modal_description.text = {"q_thunder_guard_offer": "正常摸牌已完成，是否发动【雷佑】？", "q_thunder_guard_category": "选择获得的牌类别", "q_thunderstorm_rank": "选择新的点数", "card_area_choice": "选择范围攻击的结算区域。", "momentum_direction": "选择目标移动的正交方向。", "k_strategy_card": "选择视为使用的奇异牌", "k_strategy_target": "选择目标", "k_brain_recover": "【巨脑】选择获得上次奇策的模拟牌，或取回全部媒介牌。", "endgame_card": "【终局】选择要当作的牌。", "endgame_target": "选择【终局】的目标。", "barrier_break_card": "【壁垒拆除】选择目标区域中要弃置的牌。", "shya_response_offer": "其他角色响应了 Shya 的牌，是否发动【碎光】赋予1闪光并摸1张？", "shya_break_offer": "是否发动【碎光】，移除目标的全部闪光？", "shya_break_consequence": "【碎光】：选择弃牌或受到等量真实伤害。", "ginger_power_target": "选择舍身突击目标", "ginger_power_reward": "选择追加效果", "zc_frenzy_category": "选择要全部弃置的手牌类别", "zc_frenzy_target": "选择本回合尚未被【狂极】命中的目标", "maddy_explore_choice": "选择【勘探】奖励", "maddy_reclaim_offer": "【开垦】本回合首次造成伤害后可发动：指定3个普通格，回合结束转化。", "maddy_reclaim_tile": "【开垦】选择一个普通格（共需指定3个）。", "na1_foresight_draw": "【远识】选择本次少摸的牌数；每少摸1张获得2枚金币。"}.get(kind, "请选择") as String
 		for command: Dictionary in state.call("legal_commands", 0) as Array[Dictionary]:
 			var value: Variant = (command.get("payload", {}) as Dictionary).get("value")
 			var label := String(value)
-			if kind == "k_strategy_card":
+			if kind == "k_strategy_card" or kind == "endgame_card":
 				label = String((catalog.call("resolve_card", String(value)) as Dictionary).get("name", value))
+			elif kind == "barrier_break_card":
+				var encoded := String(value)
+				var parts := encoded.split("|", false, 1)
+				var zone_name := {"hand": "手牌", "purchased_hand": "保留牌"}.get(String(parts[0]), String(parts[0]).trim_prefix("equipment:")) as String
+				label = "%s · %s" % [zone_name, String((catalog.call("resolve_card", String(parts[1])) as Dictionary).get("name", parts[1]))]
+			elif kind == "k_brain_recover":
+				label = "取回全部媒介牌" if String(value) == "medium" else "获得模拟的奇异牌"
+			elif kind == "shya_break_offer":
+				label = "发动碎光" if String(value) == "use" else "不发动"
+			elif kind == "shya_response_offer":
+				label = "获1闪光并摸1张" if String(value) == "use" else "跳过"
+			elif kind == "shya_break_consequence":
+				label = "弃置等量手牌" if String(value) == "discard" else "受到等量真实伤害"
 			elif kind.ends_with("target") and int(value) >= 0:
 				label = String((state.call("player", int(value)) as Dictionary).get("name", value))
 			elif kind == "ginger_power_reward":
 				label = "回复1点生命" if String(value) == "heal" else "摸1张牌"
+			elif kind == "maddy_explore_choice":
+				label = {"heal": "回复1点生命", "coins": "获得2枚金币", "draw": "摸2张牌", "draw_three": "摸3张牌（事件抵消待实现）"}.get(String(value), String(value)) as String
+			elif kind == "maddy_reclaim_tile":
+				label = "指定格子 %s" % String(value).replace(":", ", ")
+			elif kind == "na1_foresight_draw":
+				label = "少摸%d张 · 获得%d枚金币" % [int(value), int(value) * 2]
+			elif kind == "card_area_choice":
+				label = {"northwest": "左上 2×2", "northeast": "右上 2×2", "southwest": "左下 2×2", "southeast": "右下 2×2", "row": "所在行", "column": "所在列"}.get(String(value), String(value)) as String
+			elif kind == "momentum_direction":
+				label = {"up": "向上", "right": "向右", "down": "向下", "left": "向左"}.get(String(value), String(value)) as String
 			elif kind == "q_thunder_guard_end_decision":
 				label = "再次发动雷佑" if String(value) == "use" else "结束回合"
+			elif kind == "q_thunder_guard_offer":
+				label = "发动雷佑" if String(value) == "use" else "暂不发动"
+			elif kind == "zc_frenzy_category":
+				label = {"attack": "攻击牌", "defense": "防御牌", "奇异": "奇异牌", "equipment": "装备牌"}.get(String(value), String(value)) as String
 			var button := Button.new()
 			button.text = label
 			button.pressed.connect(_submit_human_command.bind(command))
@@ -979,7 +1120,7 @@ func _refresh_blocking_modal() -> void:
 			var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
 			var card_button: CheckButton = CheckButton.new()
 			var discard_badge := _card_identity_badge(definition)
-			card_button.text = "%s%s · %s" % [(discard_badge + " · ") if not discard_badge.is_empty() else "旧版牌 · ", String(definition.get("name", card_id)), _range_text(definition)]
+			card_button.text = "%s%s · %s" % [(discard_badge + " · ") if not discard_badge.is_empty() else "旧版牌 · ", String(definition.get("name", card_id)), _range_text(definition, 0)]
 			card_button.tooltip_text = "%s\n%s" % [_card_identity_text(definition), String(definition.get("description", ""))]
 			card_button.button_pressed = discard_selected_indices.has(index)
 			card_button.disabled = not card_button.button_pressed and discard_selected_indices.size() >= required_count
@@ -1026,7 +1167,7 @@ func _refresh_blocking_modal() -> void:
 		for command: Dictionary in state.call("legal_commands", 0) as Array[Dictionary]:
 			var card_id: String = String((command.get("payload", {}) as Dictionary).get("card_id", ""))
 			var button: Button = Button.new()
-			button.text = "不响应" if card_id.is_empty() else "使用【%s】" % String((catalog.call("resolve_card", card_id) as Dictionary).get("name", card_id))
+			button.text = "不响应" if card_id.is_empty() else ("移除场上2个闪光并无效" if card_id == "shya_flash_negate" else "使用【%s】" % String((catalog.call("resolve_card", card_id) as Dictionary).get("name", card_id)))
 			button.pressed.connect(_submit_human_command.bind(command))
 			modal_actions.add_child(button)
 		return
@@ -1099,7 +1240,7 @@ func _show_player_history(player_id: int) -> void:
 		var entry: Dictionary = entry_value as Dictionary
 		var definition: Dictionary = catalog.call("resolve_card", String(entry.get("card_id", ""))) as Dictionary
 		var history_badge := _card_identity_badge(definition)
-		var line: Label = _label("第%d轮 · %s%s · %s\n%s\n%s" % [int(entry.get("round", 0)), (history_badge + " · ") if not history_badge.is_empty() else "旧版牌 · ", String(definition.get("name", entry.get("card_id", ""))), _range_text(definition), _card_identity_text(definition), String(definition.get("description", ""))], 14, COLORS["ink"] as Color)
+		var line: Label = _label("第%d轮 · %s%s · %s\n%s\n%s" % [int(entry.get("round", 0)), (history_badge + " · ") if not history_badge.is_empty() else "旧版牌 · ", String(definition.get("name", entry.get("card_id", ""))), _range_text(definition, player_id), _card_identity_text(definition), String(definition.get("description", ""))], 14, COLORS["ink"] as Color)
 		line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		modal_actions.add_child(line)
 	if modal_actions.get_child_count() == 0:
@@ -1110,14 +1251,19 @@ func _show_player_history(player_id: int) -> void:
 	modal_actions.add_child(close_button)
 
 
-func _range_text(definition: Dictionary) -> String:
+func _range_text(definition: Dictionary, player_id: int = -1) -> String:
 	var target: String = String(definition.get("target", "self"))
 	if target == "self":
 		return "自身"
-	var range_value := int(definition.get("range", 0))
+	if String(definition.get("category", "")) == "奇异":
+		return "无距离限制"
+	var range_value := int(state.call("_definition_range", player_id, definition)) if state != null and player_id >= 0 else int(definition.get("range", 0))
 	if target == "all_enemies_in_range":
 		var side := range_value * 2 + 1
 		return "%dx%d范围" % [side, side]
+	if String(definition.get("category", "")) == "attack":
+		var attack_side := range_value * 2 + 1
+		return "%dx%d攻击范围" % [attack_side, attack_side]
 	return "距离%d" % range_value
 
 

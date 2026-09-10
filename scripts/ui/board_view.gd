@@ -17,6 +17,7 @@ var state: RefCounted
 var move_commands: Dictionary = {}
 var target_ids: Array[int] = []
 var range_cells: Array[Vector2i] = []
+var move_path_cells: Array[Vector2i] = []
 var hovered_cell: Vector2i = Vector2i(-1, -1)
 var keyboard_cell: Vector2i = Vector2i(-1, -1)
 var font: Font
@@ -44,6 +45,11 @@ func set_interactions(legal_moves: Dictionary, legal_targets: Array[int]) -> voi
 
 func set_range_preview(cells: Array[Vector2i]) -> void:
 	range_cells = cells.duplicate()
+	queue_redraw()
+
+
+func set_move_path(cells: Array[Vector2i]) -> void:
+	move_path_cells = cells.duplicate()
 	queue_redraw()
 
 
@@ -90,6 +96,9 @@ func _draw() -> void:
 			var destination_key: String = "%d:%d" % [x, y]
 			if move_commands.has(destination_key):
 				draw_rect(rect.grow(-3.0), Color("d94f76"), false, 3.0)
+			if move_path_cells.has(position):
+				draw_rect(rect.grow(-5.0), Color(0.38, 0.66, 0.46, 0.28), true)
+				draw_rect(rect.grow(-5.0), Color("b9e3c7"), false, 2.0)
 			if range_cells.has(position):
 				draw_rect(rect.grow(-5.0), Color("e1b94f"), false, 2.0)
 			if has_focus() and position == keyboard_cell:

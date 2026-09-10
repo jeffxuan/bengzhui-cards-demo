@@ -66,11 +66,17 @@
       "name_key": "event.guitar_analysis_three",
       "title": "木吉他的力量分析之三",
       "category": "reward",
-      "description": "本回合获得1个额外行动。",
+      "description": "本回合攻击无视防具且无距离限制。",
       "effects": [
         {
-          "op": "extra_action",
-          "amount": 1
+          "op": "turn_flag",
+          "flag": "attacks_ignore_distance",
+          "value": true
+        },
+        {
+          "op": "turn_flag",
+          "flag": "attacks_ignore_armor",
+          "value": true
         }
       ],
       "title_key": "event.guitar_analysis_three.title",

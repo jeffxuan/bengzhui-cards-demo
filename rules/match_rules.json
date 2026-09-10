@@ -1,5 +1,5 @@
 {
-  "version": 8,
+  "version": 10,
   "board_size": 15,
   "collapse_mode": "elimination",
   "collapse_sizes": [15, 11, 7],
@@ -11,7 +11,6 @@
   "draw_per_turn": 2,
   "hand_limit": 6,
   "move_range": 3,
-  "action_points": 2,
   "armor_cap": 3,
   "market_size": 3,
   "market_buys_per_turn": 1,

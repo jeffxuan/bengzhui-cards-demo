@@ -1,5 +1,11 @@
 ; Engine configuration file.
-; This project is pinned to the locally installed Godot 4.6.3 runtime.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
 config_version=5
 
 [application]
@@ -9,6 +15,10 @@ config/version="0.1.0-dev.5"
 run/main_scene="res://scenes/Main.tscn"
 config/features=PackedStringArray("4.6")
 
+[debug]
+
+gdscript/warnings/treat_warnings_as_errors=true
+
 [display]
 
 window/size/viewport_width=1280
@@ -17,21 +27,17 @@ window/size/window_width_override=1280
 window/size/window_height_override=720
 window/stretch/mode="canvas_items"
 
-[debug]
+[gui]
 
-gdscript/warnings/treat_warnings_as_errors=true
+theme/default_font_multichannel_signed_distance_field=true
 
 [internationalization]
 
 locale/fallback="zh_CN"
 
-[gui]
-
-theme/default_font_multichannel_signed_distance_field=true
-
 [rendering]
 
-environment/defaults/default_clear_color=Color(0.043, 0.047, 0.059, 1)
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 textures/vram_compression/import_etc2_astc=true
+environment/defaults/default_clear_color=Color(0.043, 0.047, 0.059, 1)

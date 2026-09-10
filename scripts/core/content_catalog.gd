@@ -13,7 +13,11 @@ const SUPPORTED_EFFECTS: Array[String] = [
 	"damage", "self_damage", "heal", "armor", "resource", "draw", "draw_target",
 	"status", "remove_status", "cleanse", "coins", "extra_action", "extra_move",
 	"push", "break_armor", "steal_card", "self_discard", "discard_or_damage",
-	"recover_last_card", "reveal_hand", "equip", "negate", "reflect", "modifier", "provisional"
+	"recover_last_card", "reveal_hand", "equip", "negate", "reflect", "modifier", "provisional",
+	"max_resource", "damage_missing_health", "trigger_event", "turn_flag", "double_armor",
+	"iron_wall", "next_attack_damage_bonus", "attack_cost_discount", "draw_if_turn_attack_count",
+	"draw_if_below_half_health", "assassinate_damage", "radial_push", "gaze_next_turn",
+	"transform_rightmost", "guard_next_damage"
 ]
 const LAUNCH_STATUS_IDS: Array[String] = ["paralyze", "bleed", "poison", "confusion", "hidden", "scorch"]
 const MODIFIER_IDS: Array[String] = ["free_cast", "echo"]
@@ -21,12 +25,30 @@ const SUIT_IDS: Array[String] = ["none", "hearts", "diamonds", "clubs", "spades"
 const COLOR_IDS: Array[String] = ["none", "red", "black"]
 const RANK_MIN := 0
 const RANK_MAX := 13
-const EQUIPMENT_COSTS: Dictionary = {
-	"weapon": {"stamina": 1, "mana": 0},
-	"armor": {"stamina": 1, "mana": 0},
-	"accessory": {"stamina": 0, "mana": 1}
+const ATTACK_RANGE_BONUSES: Dictionary = {
+	"crowbar_new": 2,
+	"cleaver_new": 1,
+	"rapier_new": 2,
+	"piercing_lance_new": 2,
+	"ritual_dagger_new": 1,
+	"hell_forge_sword_new": 1,
+	"dragon_slayer_new": 3,
+	"needle_new": 1,
+	"sleeve_arrow_new": 1,
+	"shadow_blade_new": 1,
+	"samurai_sword_new": 2,
+	"assassin_dagger_new": 1,
+	"shield_axe_guardian_new": 1,
+	"wind_raise_new": 2,
+	"warhammer_new": 2,
+	"twin_staff_new": 2,
+	"prospect_hammer_new": 1,
+	"hunter_longbow_new": 5,
+	"overlimit_pistol_new": 6,
+	"charge_rifle_new": 4,
+	"catapult_new": 6,
+	"mortar_new": 5
 }
-
 var version: int = 1
 var cards: Array[Dictionary] = []
 var card_instances: Array[Dictionary] = []
@@ -107,11 +129,14 @@ func provisional_report() -> Array[Dictionary]:
 		if bool(event_definition.get("provisional", false)):
 			result.append({"kind": "event", "id": event_definition.get("id", ""), "description": event_definition.get("description", "")})
 	for card_definition: Dictionary in staged_cards:
-		result.append({"kind": "staged_card", "id": card_definition.get("id", ""), "description": card_definition.get("source_text", "")})
+		if bool(card_definition.get("provisional", false)):
+			result.append({"kind": "staged_card", "id": card_definition.get("id", ""), "description": card_definition.get("source_text", "")})
 	for event_definition: Dictionary in staged_events:
-		result.append({"kind": "staged_event", "id": event_definition.get("id", ""), "description": event_definition.get("source_text", "")})
+		if bool(event_definition.get("provisional", false)):
+			result.append({"kind": "staged_event", "id": event_definition.get("id", ""), "description": event_definition.get("source_text", "")})
 	for character_definition: Dictionary in staged_characters:
-		result.append({"kind": "staged_character", "id": character_definition.get("id", ""), "description": character_definition.get("name", "")})
+		if bool(character_definition.get("provisional", false)):
+			result.append({"kind": "staged_character", "id": character_definition.get("id", ""), "description": character_definition.get("name", "")})
 	return result
 
 
@@ -119,12 +144,7 @@ func staged_execution_readiness() -> Dictionary:
 	var ready_ids: Array[String] = []
 	var provisional_ids: Array[String] = []
 	for definition: Dictionary in staged_cards:
-		var has_provisional := false
-		for effect_value: Variant in definition.get("effects", []) as Array:
-			if effect_value is Dictionary and String((effect_value as Dictionary).get("op", "")) == "provisional":
-				has_provisional = true
-				break
-		if has_provisional:
+		if bool(definition.get("provisional", false)):
 			provisional_ids.append(String(definition.get("id", "")))
 		else:
 			ready_ids.append(String(definition.get("id", "")))
@@ -345,10 +365,31 @@ func _load_all() -> void:
 	staged_cards = _dictionary_array(new_card_document.get("cards", []))
 	for staged_card: Dictionary in staged_cards:
 		if String(staged_card.get("category", "")) == "equipment":
-			var slot := String(staged_card.get("slot", ""))
-			staged_card["cost"] = (EQUIPMENT_COSTS.get(slot, {"stamina": 1, "mana": 0}) as Dictionary).duplicate()
+			# Equipping consumes the card by moving it from hand to the slot.
+			staged_card["cost"] = {"stamina": 0, "mana": 0}
+			var staged_card_id := String(staged_card.get("id", ""))
+			if ATTACK_RANGE_BONUSES.has(staged_card_id):
+				staged_card["attack_range_bonus"] = int(ATTACK_RANGE_BONUSES[staged_card_id])
 		elif not staged_card.has("cost"):
 			staged_card["cost"] = {"stamina": 0, "mana": 0}
+		var staged_id := String(staged_card.get("id", ""))
+		match staged_id:
+			"barrier_break_new":
+				staged_card["target"] = "enemy"
+				staged_card["ignore_distance"] = true
+			"endgame_new", "endgame_ambitionist_new":
+				staged_card["target"] = "self"
+			"tusk_new":
+				staged_card["target"] = "enemy"
+				staged_card["ignore_distance"] = true
+				staged_card["unanswerable"] = true
+				staged_card["effects"] = [{"op": "max_resource", "resource": "stamina", "amount": -2}]
+			"bloodbath_new":
+				staged_card["target"] = "enemy"
+				staged_card["effects"] = [{"op": "damage_missing_health", "maximum": 4, "kind": "normal"}, {"op": "self_damage", "amount": 1, "kind": "true"}]
+			"sleepless_new":
+				staged_card["target"] = "self"
+				staged_card["effects"] = [{"op": "trigger_event"}]
 		var staged_cost: Dictionary = staged_card.get("cost", {}) as Dictionary
 		var total_cost := int(staged_cost.get("stamina", 0)) + int(staged_cost.get("mana", 0))
 		staged_card["price"] = 1 if total_cost <= 0 else total_cost
@@ -586,8 +627,8 @@ func _validate_staged_cards() -> void:
 		for key: String in ["name", "category", "profession", "cost", "source_text", "instances", "effects", "provisional"]:
 			if not card_definition.has(key):
 				validation_errors.append("Staged card %s is missing %s." % [card_id, key])
-		if not bool(card_definition.get("provisional", false)):
-			validation_errors.append("Staged card %s must be marked provisional until mapped." % card_id)
+		if card_definition.has("provisional") and typeof(card_definition["provisional"]) != TYPE_BOOL:
+			validation_errors.append("Staged card %s provisional must be boolean." % card_id)
 		if String(card_definition.get("category", "")) == "equipment" and card_definition.get("durability", null) != null and int(card_definition.get("durability", -1)) < 0:
 			validation_errors.append("Staged equipment %s has invalid durability." % card_id)
 		var instances: Array = card_definition.get("instances", []) as Array

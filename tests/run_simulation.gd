@@ -5,6 +5,7 @@ const ContentCatalogScript = preload("res://scripts/core/content_catalog.gd")
 const MatchStateScript = preload("res://scripts/core/match_state.gd")
 
 var match_count: int = 100
+const MAX_COMMANDS_PER_MATCH: int = 400
 
 
 func _init() -> void:
@@ -30,6 +31,7 @@ func _init() -> void:
 	var total_area_damage: int = 0
 	var total_pressure_damage: int = 0
 	var finish_reasons: Dictionary = {}
+	var command_types: Dictionary = {}
 	var failed_matches: int = 0
 	var failure_details: Array[String] = []
 	for match_index: int in match_count:
@@ -39,7 +41,10 @@ func _init() -> void:
 		var state: RefCounted = MatchStateScript.new(rules, catalog, roster, 1000 + match_index)
 		var ai: RefCounted = AIControllerScript.new()
 		var command_count: int = 0
-		while not bool(state.get("finished")) and command_count < 250 and int(state.get("completed_rounds")) <= 20:
+		# Multi-step effects (targeting, discards, and responses) are each submitted as
+		# commands. Keep this guard above the maximum normal 20-round resolution while
+		# retaining the round cap as the actual no-progress detector.
+		while not bool(state.get("finished")) and command_count < MAX_COMMANDS_PER_MATCH and int(state.get("completed_rounds")) <= 20:
 			var actor_id: int
 			var pending_action: Dictionary = state.get("pending_action") as Dictionary
 			var pending_discard: Dictionary = state.get("pending_discard") as Dictionary
@@ -62,6 +67,8 @@ func _init() -> void:
 			if not bool(state.call("submit_command", command)):
 				failure_details.append("seed=%d rejected=%s error=%s" % [1000 + match_index, JSON.stringify(command), String(state.get("last_error"))])
 				break
+			var command_type := String(command.get("type", "unknown"))
+			command_types[command_type] = int(command_types.get(command_type, 0)) + 1
 			command_count += 1
 		total_commands += command_count
 		total_rounds += int(state.get("completed_rounds"))
@@ -111,7 +118,7 @@ func _init() -> void:
 		push_error("SIMULATION_FAILED: release gates failed: %s balance=%s finish_reasons=%s" % [", ".join(gate_failures), JSON.stringify(balance_index), JSON.stringify(finish_reasons)])
 		quit(1)
 		return
-	print("SIMULATION_OK: matches=%d average_commands=%.2f average_rounds=%.2f average_eliminations=%.2f last_survivor_rate=%.2f finish_reasons=%s damage={single:%d,area:%d,pressure:%d} wins=%s appearances=%s balance_index=%s" % [match_count, average_commands, float(total_rounds) / float(match_count), float(total_eliminations) / float(match_count), last_survivor_rate, JSON.stringify(finish_reasons), total_single_target_damage, total_area_damage, total_pressure_damage, JSON.stringify(wins), JSON.stringify(appearances), JSON.stringify(balance_index)])
+	print("SIMULATION_OK: matches=%d average_commands=%.2f average_rounds=%.2f average_eliminations=%.2f last_survivor_rate=%.2f finish_reasons=%s command_types=%s damage={single:%d,area:%d,pressure:%d} wins=%s appearances=%s balance_index=%s" % [match_count, average_commands, float(total_rounds) / float(match_count), float(total_eliminations) / float(match_count), last_survivor_rate, JSON.stringify(finish_reasons), JSON.stringify(command_types), total_single_target_damage, total_area_damage, total_pressure_damage, JSON.stringify(wins), JSON.stringify(appearances), JSON.stringify(balance_index)])
 	quit(0)
 
 

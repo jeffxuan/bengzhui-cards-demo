@@ -827,6 +827,14 @@ func _on_board_cell_selected(position: Vector2i) -> void:
 	if settings_open or state == null:
 		return
 	var key: String = "%d:%d" % [position.x, position.y]
+	# Board-targeted cards (for example Suppress) carry their chosen center in
+	# the rule command. Resolve that command directly instead of exposing coordinates.
+	for command: Dictionary in selected_target_commands:
+		var payload: Dictionary = command.get("payload", {}) as Dictionary
+		var command_position: Array = payload.get("position", []) as Array
+		if command_position.size() >= 2 and Vector2i(int(command_position[0]), int(command_position[1])) == position:
+			_submit_human_command(command)
+			return
 	if move_commands.has(key):
 		if selected_move_key == key:
 			_submit_human_command(move_commands[key] as Dictionary)
@@ -946,7 +954,7 @@ func _run_ai_loop() -> void:
 		var actor_id: int = _required_actor_id()
 		if actor_id == 0 or actor_id < 0:
 			break
-		var delay: float = 0.05 if bool(settings.get("reduced_motion", false)) else 0.28
+		var delay: float = 0.05 if bool(settings.get("reduced_motion", false)) else 0.60
 		await get_tree().create_timer(delay).timeout
 		var command: Dictionary = ai_controller.call("choose_command", state, actor_id) as Dictionary
 		if command.is_empty() or not bool(state.call("submit_command", command)):
@@ -1038,7 +1046,7 @@ func _refresh_blocking_modal() -> void:
 		var skill_id := String(pending_skill_choice.get("skill_id", ""))
 		var kind := String(pending_skill_choice.get("kind", ""))
 		modal_title.text = "结算选择"
-		modal_description.text = {"q_thunder_guard_offer": "正常摸牌已完成，是否发动【雷佑】？", "q_thunder_guard_category": "选择获得的牌类别", "q_thunderstorm_rank": "选择新的点数", "card_area_choice": "选择范围攻击的结算区域。", "momentum_direction": "选择目标移动的正交方向。", "k_strategy_card": "选择视为使用的奇异牌", "k_strategy_target": "选择目标", "k_brain_recover": "【巨脑】选择获得上次奇策的模拟牌，或取回全部媒介牌。", "endgame_card": "【终局】选择要当作的牌。", "endgame_target": "选择【终局】的目标。", "barrier_break_card": "【壁垒拆除】选择目标区域中要弃置的牌。", "shya_response_offer": "其他角色响应了 Shya 的牌，是否发动【碎光】赋予1闪光并摸1张？", "shya_break_offer": "是否发动【碎光】，移除目标的全部闪光？", "shya_break_consequence": "【碎光】：选择弃牌或受到等量真实伤害。", "ginger_power_target": "选择舍身突击目标", "ginger_power_reward": "选择追加效果", "zc_frenzy_category": "选择要全部弃置的手牌类别", "zc_frenzy_target": "选择本回合尚未被【狂极】命中的目标", "maddy_explore_choice": "选择【勘探】奖励", "maddy_reclaim_offer": "【开垦】本回合首次造成伤害后可发动：指定3个普通格，回合结束转化。", "maddy_reclaim_tile": "【开垦】选择一个普通格（共需指定3个）。", "na1_foresight_draw": "【远识】选择本次少摸的牌数；每少摸1张获得2枚金币。"}.get(kind, "请选择") as String
+		modal_description.text = {"q_thunder_guard_offer": "正常摸牌已完成，是否发动【雷佑】？", "q_thunder_guard_category": "选择获得的牌类别", "q_thunderstorm_rank": "选择新的点数", "card_area_choice": "选择范围攻击的结算区域。", "scatter_direction": "选择横向散射方向。", "momentum_direction": "选择目标移动的正交方向。", "k_strategy_card": "选择视为使用的奇异牌", "k_strategy_target": "选择目标", "k_brain_recover": "【巨脑】选择获得上次奇策的模拟牌，或取回全部媒介牌。", "endgame_card": "【终局】选择要当作的牌。", "endgame_target": "选择【终局】的目标。", "barrier_break_card": "【壁垒拆除】选择目标区域中要弃置的牌。", "shya_response_offer": "其他角色响应了 Shya 的牌，是否发动【碎光】赋予1闪光并摸1张？", "shya_break_offer": "是否发动【碎光】，移除目标的全部闪光？", "shya_break_consequence": "【碎光】：选择弃牌或受到等量真实伤害。", "ginger_power_target": "选择舍身突击目标", "ginger_power_reward": "选择追加效果", "zc_frenzy_category": "选择要全部弃置的手牌类别", "zc_frenzy_target": "选择本回合尚未被【狂极】命中的目标", "maddy_explore_choice": "选择【勘探】奖励", "maddy_reclaim_offer": "【开垦】本回合首次造成伤害后可发动：指定3个普通格，回合结束转化。", "maddy_reclaim_tile": "【开垦】选择一个普通格（共需指定3个）。", "na1_foresight_draw": "【远识】选择本次少摸的牌数；每少摸1张获得1枚金币。"}.get(kind, "请选择") as String
 		for command: Dictionary in state.call("legal_commands", 0) as Array[Dictionary]:
 			var value: Variant = (command.get("payload", {}) as Dictionary).get("value")
 			var label := String(value)
@@ -1066,11 +1074,13 @@ func _refresh_blocking_modal() -> void:
 			elif kind == "maddy_reclaim_tile":
 				label = "指定格子 %s" % String(value).replace(":", ", ")
 			elif kind == "na1_foresight_draw":
-				label = "少摸%d张 · 获得%d枚金币" % [int(value), int(value) * 2]
+				label = "少摸%d张 · 获得%d枚金币" % [int(value), int(value)]
 			elif kind == "card_area_choice":
 				label = {"northwest": "左上 2×2", "northeast": "右上 2×2", "southwest": "左下 2×2", "southeast": "右下 2×2", "row": "所在行", "column": "所在列"}.get(String(value), String(value)) as String
 			elif kind == "momentum_direction":
 				label = {"up": "向上", "right": "向右", "down": "向下", "left": "向左"}.get(String(value), String(value)) as String
+			elif kind == "scatter_direction":
+				label = {"left": "向左", "right": "向右"}.get(String(value), String(value)) as String
 			elif kind == "q_thunder_guard_end_decision":
 				label = "再次发动雷佑" if String(value) == "use" else "结束回合"
 			elif kind == "q_thunder_guard_offer":

@@ -31,6 +31,7 @@ func _init() -> void:
 	_test_no_action_points_and_round_pressure()
 	_test_targeting_and_public_history()
 	_test_purchased_cards_persist()
+	_test_na1_purchased_card_bonuses()
 	_test_thunderstorm_skill_discard()
 	_test_dead_q_skips_end_turn_thunder_guard()
 	_test_endgame_barrier_and_durability()
@@ -1223,6 +1224,27 @@ func _test_purchased_cards_persist() -> void:
 		var end_turn := MatchCommandScript.make(MatchCommandScript.END_TURN, 0)
 		_expect(bool(state.call("submit_command", end_turn)), "Player should be able to end turn with a purchased card reserved.")
 		_expect(((state.call("player", 0) as Dictionary).get("purchased_hand", []) as Array).size() == 1, "Purchased card must persist across turns until played.")
+
+
+func _test_na1_purchased_card_bonuses() -> void:
+	var attack_state: RefCounted = _state(["na1", "q", "ginger", "signal"], 209)
+	attack_state.players[0]["hand"] = []
+	attack_state.players[0]["purchased_hand"] = ["slash_new#001"]
+	attack_state.players[0]["position"] = Vector2i(2, 2)
+	attack_state.players[1]["position"] = Vector2i(3, 2)
+	attack_state.players[1]["hand"] = []
+	var health_before := int(attack_state.players[1].get("health", 0))
+	_expect(bool(attack_state.call("submit_command", _find_command(attack_state, MatchCommandScript.PLAY_CARD, "slash_new#001"))), "Na1 must be able to play a purchased attack card.")
+	_expect(int(attack_state.players[1].get("health", 0)) == health_before - 2, "Na1 Foresight must resolve a purchased attack card twice.")
+
+	var defense_state: RefCounted = _state(["na1", "q", "ginger", "signal"], 210)
+	defense_state.players[0]["hand"] = []
+	defense_state.players[0]["purchased_hand"] = ["iron_body_new#001"]
+	defense_state.players[0]["common_deck"] = ["slash_new#002", "slash_new#003"]
+	defense_state.players[0]["profession_deck"] = []
+	defense_state.players[0]["stamina"] = 2
+	_expect(bool(defense_state.call("submit_command", _find_command(defense_state, MatchCommandScript.PLAY_CARD, "iron_body_new#001"))), "Na1 must be able to play a purchased defense card.")
+	_expect((defense_state.players[0].get("hand", []) as Array).size() == 2, "Na1 Foresight must draw two after a purchased defense card resolves.")
 
 
 func _test_thunderstorm_skill_discard() -> void:

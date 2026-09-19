@@ -2215,6 +2215,7 @@ func _handle_play_card(payload: Dictionary) -> void:
 		active["thunder_guard_strange_cards"] = thunder_guard_strange
 	var hand: Array = (active.get("hand", []) as Array).duplicate()
 	var purchased_hand: Array = (active.get("purchased_hand", []) as Array).duplicate()
+	var was_purchased: bool = purchased_hand.has(card_id)
 	if not _remove_first(hand, card_id):
 		_remove_first(purchased_hand, card_id)
 	active["hand"] = hand
@@ -2308,7 +2309,8 @@ func _handle_play_card(payload: Dictionary) -> void:
 		"category": String(definition.get("category", "")),
 		"card_id": card_id,
 		"damage_bonus": damage_bonus,
-		"unanswerable": unanswerable or bool(definition.get("unanswerable", false))
+		"unanswerable": unanswerable or bool(definition.get("unanswerable", false)),
+		"na1_purchased": was_purchased and String(players[actor_id].get("character_id", "")) == "na1"
 	}
 	if _equipped_logical_id(actor_id, "accessory") == "verdict_new" and not bool((active.get("flags", {}) as Dictionary).get("verdict_first_card_used", false)) and target_id >= 0 and target_id < players.size() and (players[target_id].get("hand", []) as Array).size() < (active.get("hand", []) as Array).size():
 		action["unanswerable"] = true
@@ -2988,6 +2990,9 @@ func _resolve_action(action: Dictionary) -> void:
 			source_modifiers.erase("repeat_next_card")
 			players[source_id]["modifiers"] = source_modifiers
 			_emit("card_repeated", {"player_id": source_id, "card_id": card_id, "amount": 1, "message": "【%s】额外结算一次。" % String(definition.get("name", card_id))})
+		if bool(action.get("na1_purchased", false)) and category == "attack":
+			resolution_count += 1
+			_emit("card_repeated", {"player_id": source_id, "card_id": card_id, "amount": 1, "source_id": "na1_foresight", "message": "Na1 的【远识】令商店攻击牌额外结算一次。"})
 	for _resolution: int in resolution_count:
 		if category == "attack" and _equipped_logical_id(source_id, "weapon") == "mortar_new" and target_id >= 0:
 			var center: Vector2i = players[target_id].get("position", Vector2i.ZERO) as Vector2i
@@ -3001,6 +3006,9 @@ func _resolve_action(action: Dictionary) -> void:
 			_apply_effects(source_id, target_id, definition.get("effects", []) as Array, category, damage_bonus, range_limit, pressure_bonus, target_id < 0)
 		if not pending_discard.is_empty():
 			break
+	if bool(action.get("na1_purchased", false)) and category == "defense" and bool(players[source_id].get("alive", false)):
+		_draw_cards(source_id, 2)
+		_emit("skill_effect_resolved", {"player_id": source_id, "skill_id": "na1_foresight", "card_id": card_id, "message": "Na1 的【远识】令商店防御牌额外摸2张。"})
 	if bool(action.get("hand_repel", false)) and target_id >= 0 and bool(players[source_id].get("alive", false)) and bool(players[target_id].get("alive", false)):
 		_push_target(target_id, source_id, 1)
 	if bool(action.get("zc_frenzy", false)):

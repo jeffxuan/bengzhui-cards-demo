@@ -427,13 +427,13 @@ func _test_named_revised_card_effects() -> void:
 	far_target["position"] = Vector2i(13, 13)
 	far_target["hand"] = ["heavenly_sense_new#001"]
 	far_target["purchased_hand"] = []
-	var far_target_stamina_max_before := int(far_target.get("max_stamina", 0))
+	var far_target_health_max_before := int(far_target.get("max_health", 0))
 	tusk_state.players[0] = q
 	tusk_state.players[1] = far_target
 	var tusk := _find_command(tusk_state, MatchCommandScript.PLAY_CARD, "tusk_new#001")
 	_expect(not tusk.is_empty() and bool(tusk_state.call("submit_command", tusk)), "TUSK must be usable without distance restriction.")
 	_expect((tusk_state.get("pending_action") as Dictionary).is_empty(), "TUSK must not open a response window.")
-	_expect(int((tusk_state.call("player", 1) as Dictionary).get("max_stamina", -1)) == maxi(0, far_target_stamina_max_before - 2), "TUSK must reduce the target's stamina maximum by two.")
+	_expect(int((tusk_state.call("player", 1) as Dictionary).get("max_health", -1)) == maxi(1, far_target_health_max_before - 2), "TUSK must reduce the target's health maximum by two.")
 
 	var bloodbath_state: RefCounted = _state(["q", "ginger", "maddy", "signal"], 126)
 	var bloodbath_q: Dictionary = bloodbath_state.call("player", 0) as Dictionary
@@ -1478,8 +1478,10 @@ func _test_endgame_barrier_and_durability() -> void:
 	durability_state.players[1]["position"] = Vector2i(3, 2)
 	durability_state.players[1]["hand"] = []
 	var attack_command := _find_command(durability_state, MatchCommandScript.PLAY_CARD, "slash_new#001")
-	_expect(not attack_command.is_empty() and bool(durability_state.call("submit_command", attack_command)), "An equipped weapon must support an attack before durability is consumed.")
-	_expect(String(((durability_state.call("player", 0) as Dictionary).get("equipment", {}) as Dictionary).get("weapon", "")).is_empty(), "A weapon at zero durability must be destroyed after supporting the attack.")
+	_expect(not attack_command.is_empty() and bool(durability_state.call("submit_command", attack_command)), "An equipped weapon must support an attack before turn-end durability is consumed.")
+	_expect(not String(((durability_state.call("player", 0) as Dictionary).get("equipment", {}) as Dictionary).get("weapon", "")).is_empty(), "Normal weapon attacks must not consume durability.")
+	durability_state.call("_handle_end_turn")
+	_expect(String(((durability_state.call("player", 0) as Dictionary).get("equipment", {}) as Dictionary).get("weapon", "")).is_empty(), "A weapon at zero durability must be destroyed at its owner's turn end.")
 
 
 func _test_k_strategy_medium_recovery() -> void:
@@ -1661,11 +1663,11 @@ func _test_na1_gold_passive() -> void:
 	_expect(int(damage_state.players[1].get("health", 0)) == health_before - 1 and int(damage_state.players[1].get("coins", 0)) == 0, "Na1 must spend remaining coins against true damage, then take any uncovered damage.")
 
 	var income_state: RefCounted = MatchStateScript.new(rules, catalog, ["na1", "q", "ginger", "signal"], 135)
-	income_state.players[0]["coins"] = 8
+	income_state.players[0]["coins"] = 10
 	income_state.call("_begin_turn")
-	_expect(int(income_state.players[0].get("coins", 0)) == 10, "Na1 must receive one coin per four held coins at the start of Na1's turn.")
+	_expect(int(income_state.players[0].get("coins", 0)) == 12, "Na1 must receive one coin per five held coins at the start of Na1's turn.")
 	income_state.call("_begin_turn")
-	_expect(int(income_state.players[0].get("coins", 0)) == 10, "Na1 must not repeatedly re-claim the same four-coin milestones on later turns.")
+	_expect(int(income_state.players[0].get("coins", 0)) == 14, "Na1 must apply Gold Tactician again every turn using the current coin total.")
 
 
 func _test_signal_limit_and_q_end_turn_guard() -> void:
@@ -1692,7 +1694,7 @@ func _test_signal_limit_and_q_end_turn_guard() -> void:
 	var foresight_request: Dictionary = foresight_state.get("pending_skill_choice") as Dictionary
 	_expect(String(foresight_request.get("kind", "")) == "na1_foresight_draw", "Na1 must receive the Foresight draw-phase choice.")
 	_expect(bool(foresight_state.call("submit_command", MatchCommandScript.make(MatchCommandScript.SKILL_CHOICE, 0, {"request_id": String(foresight_request.get("request_id", "")), "value": 2}))), "Na1 must be able to skip two opening draws with Foresight.")
-	_expect((foresight_state.call("player", 0) as Dictionary).get("hand", []).size() == 5 and int((foresight_state.call("player", 0) as Dictionary).get("coins", 0)) == 6, "Na1 Foresight must trade two of three opening draws for four coins.")
+	_expect((foresight_state.call("player", 0) as Dictionary).get("hand", []).size() == 5 and int((foresight_state.call("player", 0) as Dictionary).get("coins", 0)) == 4, "Na1 Foresight must trade two of three opening draws for two coins.")
 
 	var q_state: RefCounted = _state(["q", "ginger", "maddy", "signal"], 137)
 	q_state.players[0]["q_thunder_guard_end_available"] = false

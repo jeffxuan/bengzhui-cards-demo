@@ -5,7 +5,7 @@ const EventDeckScript = preload("res://scripts/core/event_deck.gd")
 const MatchCommandScript = preload("res://scripts/core/match_command.gd")
 const MatchEventScript = preload("res://scripts/core/match_event.gd")
 const CARDINAL_DIRECTIONS: Array[Vector2i] = [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]
-const TARGET_EFFECTS: Array[String] = ["damage", "damage_missing_health", "assassinate_damage", "heal", "armor", "status", "status_if_damage", "remove_status", "break_armor", "push", "radial_push", "steal_card", "draw_target", "max_resource", "gaze_next_turn", "guard_next_damage"]
+const TARGET_EFFECTS: Array[String] = ["damage", "damage_missing_health", "assassinate_damage", "heal", "armor", "status", "status_if_damage", "remove_status", "break_armor", "push", "radial_push", "steal_card", "draw_target", "max_resource", "max_health", "gaze_next_turn", "guard_next_damage"]
 const NEGATIVE_STATUSES: Array[String] = ["paralyze", "bleed", "poison", "confusion"]
 const PROFESSION_ATTACK_RANGES: Dictionary = {
 	"berserker": 1,
@@ -1135,8 +1135,8 @@ func _resolve_na1_foresight_draw(player_id: int, skipped: int, request: Dictiona
 	skipped = clampi(skipped, 0, draw_amount)
 	_draw_cards(player_id, draw_amount - skipped)
 	if skipped > 0:
-		_change_coins(player_id, skipped * 2)
-	_emit("skill_choice_resolved", {"player_id": player_id, "skill_id": "na1_foresight", "skipped": skipped, "draw_amount": draw_amount - skipped, "provisional": true, "message": "Na1 发动【远识】，少摸%d张并获得%d枚金币。商店类别强化待实现。" % [skipped, skipped * 2]})
+		_change_coins(player_id, skipped)
+	_emit("skill_choice_resolved", {"player_id": player_id, "skill_id": "na1_foresight", "skipped": skipped, "draw_amount": draw_amount - skipped, "message": "Na1 发动【远识】，少摸%d张并获得%d枚金币。" % [skipped, skipped]})
 	_emit("turn_started", {"player_id": player_id, "message": "%s 开始回合。" % String(players[player_id].get("name", ""))})
 
 
@@ -1553,18 +1553,11 @@ func _begin_turn() -> void:
 			players[active_player_index] = active
 	_apply_start_turn_equipment(active_player_index)
 	if String(active.get("character_id", "")) == "na1":
-		# Count each four-coin milestone once. Repeating floor(coins / 4) every turn
-		# compounds the passive indefinitely and prevents matches from resolving.
-		var match_flags: Dictionary = active.get("match_flags", {}) as Dictionary
-		var current_gold_tier := int(active.get("coins", 0)) / 4
-		var claimed_gold_tier := int(match_flags.get("na1_gold_income_tier", 0))
-		var gold_income := maxi(0, current_gold_tier - claimed_gold_tier)
+		# 金纵按当前金币数每回合结算，而不是一次性的金币里程碑。
+		var gold_income := int(active.get("coins", 0)) / 5
 		if gold_income > 0:
-			match_flags["na1_gold_income_tier"] = current_gold_tier
-			active["match_flags"] = match_flags
-			players[active_player_index] = active
 			_change_coins(active_player_index, gold_income)
-			_emit("passive_triggered", {"player_id": active_player_index, "skill_id": "na1_gold", "coins": gold_income, "message": "Na1 的【金纵】跨过%d个金币里程碑，获得%d枚金币。" % [current_gold_tier, gold_income]})
+			_emit("passive_triggered", {"player_id": active_player_index, "skill_id": "na1_gold", "coins": gold_income, "message": "Na1 的【金纵】按当前金币获得%d枚金币。" % gold_income})
 	_emit("profession_choice_requested", {"player_id": active_player_index, "message": "%s 选择本回合职业。" % String(active.get("name", ""))})
 
 
@@ -1639,8 +1632,12 @@ func _begin_q_thunder_guard(player_id: int, from_end_turn: bool = false) -> void
 			categories.append(category)
 	if categories.is_empty():
 		categories.append("none")
+	var category_counts: Dictionary = {}
+	for entry: Dictionary in revealed:
+		var revealed_category := String((catalog.call("resolve_card", String(entry.get("card_id", ""))) as Dictionary).get("category", "none"))
+		category_counts[revealed_category] = int(category_counts.get(revealed_category, 0)) + 1
 	_request_skill_choice(player_id, "q_thunder_guard_category", "q_thunder_guard", categories, {"revealed": revealed, "from_end_turn": from_end_turn})
-	_emit("cards_revealed", {"player_id": player_id, "skill_id": "q_thunder_guard", "cards": revealed.duplicate(true), "message": "Q 展示牌堆顶%d张牌。" % revealed.size()})
+	_emit("cards_revealed", {"player_id": player_id, "skill_id": "q_thunder_guard", "categories": category_counts, "message": "Q 的【雷佑】展示了牌堆顶%d张牌：%s。" % [revealed.size(), "、".join(categories)]})
 
 
 func _resolve_q_thunder_guard_category(player_id: int, category: String, request: Dictionary) -> void:
@@ -2685,26 +2682,21 @@ func _handle_end_turn() -> void:
 		return
 	_check_ginger_breakthrough(ending_id)
 	active = players[ending_id]
-	if bool(active.get("q_thunder_guard_end_available", false)):
-		active["q_thunder_guard_end_available"] = false
-		players[ending_id] = active
-		_request_skill_choice(ending_id, "q_thunder_guard_end_decision", "q_thunder_guard", ["use", "skip"])
-		return
 	var hand_limit_for_turn: int = maxi(1, int(active.get("health", 0)) - 2)
 	var excess: int = (active.get("hand", []) as Array).size() - hand_limit_for_turn
 	if excess > 0:
 		_request_discard(ending_id, excess, "end_turn")
+		return
+	if bool(active.get("q_thunder_guard_end_available", false)):
+		active["q_thunder_guard_end_available"] = false
+		players[ending_id] = active
+		_request_skill_choice(ending_id, "q_thunder_guard_end_decision", "q_thunder_guard", ["use", "skip"])
 		return
 	_finish_end_turn(ending_id)
 
 
 func _finish_end_turn(ending_id: int) -> void:
 	var active: Dictionary = players[ending_id]
-	if bool(active.get("alive", false)) and bool(active.get("q_thunder_guard_end_available", false)):
-		active["q_thunder_guard_end_available"] = false
-		players[ending_id] = active
-		_request_skill_choice(ending_id, "q_thunder_guard_end_decision", "q_thunder_guard", ["use", "skip"])
-		return
 	_finish_maddy_reclaim(ending_id)
 	var hound_flags: Dictionary = players[ending_id].get("match_flags", {}) as Dictionary
 	var black_hound_debt := int(hound_flags.get("black_hound_debt", 0))
@@ -2718,6 +2710,7 @@ func _finish_end_turn(ending_id: int) -> void:
 		for target_id: int in _enemies_in_range(ending_id, 1):
 			_apply_status(target_id, "poison", 1, ending_id)
 		_emit("equipment_triggered", {"player_id": ending_id, "card_id": "poison_bottle_new", "message": "【毒雾瓶】使周围角色获得1层中毒。"})
+	_tick_equipment_durability(ending_id)
 	active = players[ending_id]
 	var status_rounds: Dictionary = active.get("status_rounds", {}) as Dictionary
 	var statuses: Dictionary = active.get("statuses", {}) as Dictionary
@@ -2765,8 +2758,6 @@ func _resolve_card_area_choice(source_id: int, card_id: String, choice: String) 
 			var delta := target_position - source_position
 			if delta.x * horizontal >= 1 and delta.x * horizontal <= 2 and delta.y * vertical >= 1 and delta.y * vertical <= 2:
 				targets.append(target_id)
-	if not _equipped_logical_id(source_id, "weapon").is_empty():
-		_consume_equipment_durability(source_id, "weapon", "attack")
 	var damage_bonus := _consume_damage_bonuses(source_id, definition.get("effects", []) as Array, "attack")
 	for target_id: int in targets:
 		var damage_context := {"single_target": false, "area": true, "pressure_bonus": 0}
@@ -2779,8 +2770,6 @@ func _resolve_scatter(source_id: int, card_id: String, direction_id: String) -> 
 	var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
 	var source_position: Vector2i = players[source_id].get("position", Vector2i.ZERO) as Vector2i
 	var direction := -1 if direction_id == "left" else 1
-	if not _equipped_logical_id(source_id, "weapon").is_empty():
-		_consume_equipment_durability(source_id, "weapon", "attack")
 	for target_id: int in players.size():
 		if target_id == source_id or not bool(players[target_id].get("alive", false)):
 			continue
@@ -2984,8 +2973,6 @@ func _resolve_action(action: Dictionary) -> void:
 			if step != Vector2i.ZERO and active_bounds().has_point(forward) and not _is_occupied(forward, source_id):
 				players[source_id]["position"] = forward
 		_emit("counterstrike_reflected", {"player_id": source_id, "target_id": target_id, "message": "【反戈一击】反弹攻击且向前移动1格。"})
-	if category == "attack" and not card_id.is_empty() and not _equipped_logical_id(source_id, "weapon").is_empty():
-		_consume_equipment_durability(source_id, "weapon", "attack")
 	var resolution_count := 1
 	if not card_id.is_empty() and source_id >= 0 and source_id < players.size():
 		var source_modifiers: Dictionary = players[source_id].get("modifiers", {}) as Dictionary
@@ -3048,9 +3035,9 @@ func _finish_zc_frenzy(action: Dictionary, dealt_damage: bool) -> void:
 		players[player_id]["flags"] = flags
 		_emit("skill_effect_resolved", {"player_id": player_id, "skill_id": "zc_frenzy", "target_id": target_id, "message": "【狂极】造成伤害，本回合不能再指定该目标。"})
 	else:
-		_change_resource(player_id, "stamina", -1)
+		_deal_damage(player_id, 1, "true", player_id, false)
 		_draw_cards(player_id, 2)
-		_emit("skill_effect_resolved", {"player_id": player_id, "skill_id": "zc_frenzy", "message": "【狂极】未造成伤害，Z&C 失去1点体力并摸2张牌。"})
+		_emit("skill_effect_resolved", {"player_id": player_id, "skill_id": "zc_frenzy", "message": "【狂极】未造成伤害，Z&C 失去1点生命并摸2张牌。"})
 
 
 func _apply_effects(source_id: int, target_id: int, effects: Array, category: String, damage_bonus: int, range_limit: int, pressure_bonus: int = 0, area_action: bool = false) -> void:
@@ -3173,6 +3160,8 @@ func _apply_single_effect(source_id: int, target_id: int, effect: Dictionary, ca
 			target[resource] = mini(int(target.get(resource, 0)), int(target.get(maximum_key, 0)))
 			players[target_id] = target
 			_emit("maximum_resource_changed", {"player_id": target_id, "resource": resource, "delta": amount, "maximum": int(target.get(maximum_key, 0)), "message": "%s 的%s上限变为%d。" % [String(target.get("name", "")), "体力" if resource == "stamina" else "法力", int(target.get(maximum_key, 0))]})
+		"max_health":
+			_change_max_health(target_id, amount, String(effect.get("source_id", "effect")))
 		"trigger_event":
 			_draw_event(source_id)
 		"status":
@@ -3545,8 +3534,6 @@ func _apply_start_turn_equipment(player_id: int) -> void:
 			if bool(players[player_id].get("alive", false)):
 				_draw_cards(player_id, 2)
 			triggered = true
-	if triggered and not _equipped_logical_id(player_id, "accessory").is_empty():
-		_consume_equipment_durability(player_id, "accessory", "turn_start")
 	if _equipped_logical_id(player_id, "armor") == "endless_line_new":
 		(players[player_id].get("hand", []) as Array).append("defensive_line_new#001")
 		_emit("card_created", {"player_id": player_id, "card_id": "defensive_line_new#001", "message": "%s 的【无尽防线】将【防线】置入手牌。" % String(players[player_id].get("name", ""))})
@@ -3570,6 +3557,13 @@ func _consume_equipment_durability(player_id: int, slot: String, source_id: Stri
 	_emit("equipment_durability_changed", {"player_id": player_id, "slot": slot, "current": current, "maximum": int(slot_durability.get("maximum", current)), "source_id": source_id, "message": "%s 的装备耐久降至%d。" % [String(players[player_id].get("name", "")), current]})
 	if current == 0:
 		_discard_equipment_slot(player_id, slot, "durability_depleted")
+
+
+func _tick_equipment_durability(player_id: int) -> void:
+	# Unless a card explicitly says otherwise, equipment wears down once per owner turn.
+	for slot: String in ["weapon", "armor", "accessory"]:
+		if not _equipped_logical_id(player_id, slot).is_empty():
+			_consume_equipment_durability(player_id, slot, "turn_end")
 
 
 func _equipped_logical_id(player_id: int, slot: String) -> String:
@@ -3823,8 +3817,6 @@ func _deal_damage(target_id: int, amount: int, kind: String, source_id: int, is_
 		var cape_options := _elemental_hand_cards(target_id)
 		if not cape_options.is_empty():
 			_request_skill_choice(target_id, "burning_cape_discard", "burning_cape_new", cape_options, {"attacker_id": source_id})
-	if final_amount > 0 and not _equipped_logical_id(target_id, "armor").is_empty():
-		_consume_equipment_durability(target_id, "armor", "damage_taken")
 	if final_amount > 0 and _equipped_logical_id(target_id, "weapon") == "a_plus_new":
 		_discard_equipment_slot(target_id, "weapon", "a_plus_self_damage")
 	if int(target.get("health", 0)) <= 0:
@@ -4152,7 +4144,6 @@ func _draw_cards(player_id: int, amount: int) -> void:
 	target["profession_discard"] = profession_discard
 	players[player_id] = target
 	if hand.size() > hand_before_draw and _equipped_logical_id(player_id, "accessory") == "wax_seal_new":
-		_consume_equipment_durability(player_id, "accessory", "card_gained")
 		_draw_cards(player_id, 1)
 	if hand.size() > hand_before_draw and pending_skill_choice.is_empty():
 		for owner_id: int in players.size():

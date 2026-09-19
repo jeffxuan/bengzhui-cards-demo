@@ -827,6 +827,14 @@ func _on_board_cell_selected(position: Vector2i) -> void:
 	if settings_open or state == null:
 		return
 	var key: String = "%d:%d" % [position.x, position.y]
+	# Board-targeted cards (for example Suppress) carry their chosen center in
+	# the rule command. Resolve that command directly instead of exposing coordinates.
+	for command: Dictionary in selected_target_commands:
+		var payload: Dictionary = command.get("payload", {}) as Dictionary
+		var command_position: Array = payload.get("position", []) as Array
+		if command_position.size() >= 2 and Vector2i(int(command_position[0]), int(command_position[1])) == position:
+			_submit_human_command(command)
+			return
 	if move_commands.has(key):
 		if selected_move_key == key:
 			_submit_human_command(move_commands[key] as Dictionary)

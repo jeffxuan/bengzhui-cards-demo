@@ -571,6 +571,8 @@ func _handle_skill_choice(payload: Dictionary) -> void:
 			_begin_maddy_reclaim_selection(player_id, chosen_tiles)
 		"na1_foresight_draw":
 			_resolve_na1_foresight_draw(player_id, int(value), request)
+		"na1_foresight_extra_target":
+			_resolve_na1_foresight_extra_target(player_id, int(value), request)
 		"old_map_choice":
 			if String(value) == "draw":
 				_draw_cards(player_id, 1)
@@ -1138,6 +1140,24 @@ func _resolve_na1_foresight_draw(player_id: int, skipped: int, request: Dictiona
 		_change_coins(player_id, skipped)
 	_emit("skill_choice_resolved", {"player_id": player_id, "skill_id": "na1_foresight", "skipped": skipped, "draw_amount": draw_amount - skipped, "message": "Na1 发动【远识】，少摸%d张并获得%d枚金币。" % [skipped, skipped]})
 	_emit("turn_started", {"player_id": player_id, "message": "%s 开始回合。" % String(players[player_id].get("name", ""))})
+
+
+func _resolve_na1_foresight_extra_target(player_id: int, target_id: int, request: Dictionary) -> void:
+	var definition: Dictionary = request.get("definition", {}) as Dictionary
+	var selected: Array = (request.get("selected_targets", []) as Array).duplicate()
+	if target_id < 0 or target_id >= players.size() or selected.has(target_id) or not bool(players[target_id].get("alive", false)):
+		return
+	selected.append(target_id)
+	_apply_effects(player_id, target_id, definition.get("effects", []) as Array, "奇异", int(request.get("damage_bonus", 0)), _definition_range(player_id, definition))
+	var remaining := int(request.get("remaining", 0)) - 1
+	var options: Array[int] = []
+	if remaining > 0:
+		for candidate_id: int in players.size():
+			if candidate_id != player_id and not selected.has(candidate_id) and bool(players[candidate_id].get("alive", false)):
+				options.append(candidate_id)
+	if not options.is_empty():
+		_request_skill_choice(player_id, "na1_foresight_extra_target", "na1_foresight", options, {"definition": definition.duplicate(true), "damage_bonus": int(request.get("damage_bonus", 0)), "selected_targets": selected, "remaining": remaining})
+	_emit("skill_effect_resolved", {"player_id": player_id, "skill_id": "na1_foresight", "target_id": target_id, "message": "Na1 的【远识】将商店奇异牌额外结算于%s。" % String(players[target_id].get("name", ""))})
 
 
 func _resolve_k_brain_recovery(player_id: int, selection: String, request: Dictionary) -> void:
@@ -3016,6 +3036,13 @@ func _resolve_action(action: Dictionary) -> void:
 		_finish_zc_frenzy(action, dealt_damage)
 	if bool(action.get("skirmish", false)) and target_id >= 0 and target_id < players.size() and bool(players[target_id].get("alive", false)) and int(players[target_id].get("health", 0)) >= int(action.get("target_health_before", 0)) and pending_skill_choice.is_empty():
 		_request_skill_choice(source_id, "skirmish_direction", "skirmish_new", ["up", "right", "down", "left"], {"target_id": target_id})
+	if bool(action.get("na1_purchased", false)) and category == "奇异" and target_id >= 0 and target_id != source_id and pending_skill_choice.is_empty():
+		var extra_targets: Array[int] = []
+		for candidate_id: int in players.size():
+			if candidate_id != source_id and candidate_id != target_id and bool(players[candidate_id].get("alive", false)):
+				extra_targets.append(candidate_id)
+		if not extra_targets.is_empty():
+			_request_skill_choice(source_id, "na1_foresight_extra_target", "na1_foresight", extra_targets, {"definition": definition.duplicate(true), "damage_bonus": damage_bonus, "selected_targets": [target_id], "remaining": 2})
 	if not card_id.is_empty() and source_id >= 0 and source_id < players.size():
 		var source: Dictionary = players[source_id]
 		source["last_card_id"] = card_id

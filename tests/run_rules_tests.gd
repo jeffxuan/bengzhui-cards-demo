@@ -1246,6 +1246,20 @@ func _test_na1_purchased_card_bonuses() -> void:
 	_expect(bool(defense_state.call("submit_command", _find_command(defense_state, MatchCommandScript.PLAY_CARD, "iron_body_new#001"))), "Na1 must be able to play a purchased defense card.")
 	_expect((defense_state.players[0].get("hand", []) as Array).size() == 2, "Na1 Foresight must draw two after a purchased defense card resolves.")
 
+	var strange_state: RefCounted = _state(["na1", "q", "ginger", "signal"], 211)
+	strange_state.players[0]["hand"] = []
+	strange_state.players[0]["purchased_hand"] = ["soul_drain_new#001"]
+	strange_state.players[0]["mana"] = 2
+	strange_state.players[0]["position"] = Vector2i(2, 2)
+	for target_id: int in [1, 2, 3]:
+		strange_state.players[target_id]["position"] = Vector2i(2 + target_id, 2)
+		strange_state.players[target_id]["hand"] = ["slash_new#00%d" % (target_id + 1)]
+	_expect(bool(strange_state.call("submit_command", _find_command(strange_state, MatchCommandScript.PLAY_CARD, "soul_drain_new#001"))), "Na1 must be able to play a purchased targeted strange card.")
+	var extra_request: Dictionary = strange_state.get("pending_skill_choice") as Dictionary
+	_expect(String(extra_request.get("kind", "")) == "na1_foresight_extra_target", "Na1 Foresight must request an additional target after the first purchased strange target resolves.")
+	_expect(bool(strange_state.call("submit_command", MatchCommandScript.make(MatchCommandScript.SKILL_CHOICE, 0, {"request_id": String(extra_request.get("request_id", "")), "value": 2}))), "Na1 must be able to select a second strange-card target.")
+	_expect((strange_state.players[0].get("hand", []) as Array).size() >= 2, "Na1 Foresight must resolve the strange card for an additional selected target.")
+
 
 func _test_thunderstorm_skill_discard() -> void:
 	var state: RefCounted = _state(["q", "ginger", "maddy", "signal"], 109)

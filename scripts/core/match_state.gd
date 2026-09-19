@@ -1783,6 +1783,13 @@ func _legal_card_commands(actor_id: int) -> Array[Dictionary]:
 			if not _gold_panning_options(actor_id).is_empty():
 				result.append(MatchCommandScript.make(MatchCommandScript.PLAY_CARD, actor_id, {"card_id": card_id, "target_id": actor_id}))
 			continue
+		if logical_id == "suppress_new":
+			for y: int in range(active_bounds().position.y, active_bounds().end.y):
+				for x: int in range(active_bounds().position.x, active_bounds().end.x):
+					var center := Vector2i(x, y)
+					if tile_kind(center) != "collapsed":
+						result.append(MatchCommandScript.make(MatchCommandScript.PLAY_CARD, actor_id, {"card_id": card_id, "position": _position_payload(center)}))
+			continue
 		if logical_id == "last_resort_new":
 			if not _last_resort_options(actor_id).is_empty():
 				result.append(MatchCommandScript.make(MatchCommandScript.PLAY_CARD, actor_id, {"card_id": card_id, "target_id": actor_id}))

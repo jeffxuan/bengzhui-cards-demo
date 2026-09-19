@@ -1554,7 +1554,7 @@ func _begin_turn() -> void:
 	_apply_start_turn_equipment(active_player_index)
 	if String(active.get("character_id", "")) == "na1":
 		# 金纵按当前金币数每回合结算，而不是一次性的金币里程碑。
-		var gold_income := int(active.get("coins", 0)) / 5
+		var gold_income := 1 if int(active.get("coins", 0)) >= 5 else 0
 		if gold_income > 0:
 			_change_coins(active_player_index, gold_income)
 			_emit("passive_triggered", {"player_id": active_player_index, "skill_id": "na1_gold", "coins": gold_income, "message": "Na1 的【金纵】按当前金币获得%d枚金币。" % gold_income})
@@ -3703,12 +3703,15 @@ func _deal_damage(target_id: int, amount: int, kind: String, source_id: int, is_
 				final_amount = maxi(0, final_amount - 1)
 				target_flags["bastion_used"] = true
 				target["flags"] = target_flags
-	if String(target.get("character_id", "")) == "na1" and final_amount > 0:
-		var coin_block: int = mini(final_amount, int(target.get("coins", 0)))
+	var na1_flags: Dictionary = target.get("match_flags", {}) as Dictionary
+	if String(target.get("character_id", "")) == "na1" and final_amount > 0 and int(na1_flags.get("na1_gold_prevent_round", -1)) != completed_rounds:
+		var coin_block: int = mini(final_amount, 1)
 		if coin_block > 0:
 			target["coins"] = int(target.get("coins", 0)) - coin_block
 			final_amount -= coin_block
-			_emit("damage_prevented", {"target_id": target_id, "amount": coin_block, "reason_id": "na1_gold", "message": "Na1 通过【金纵】失去%d枚金币，抵消%d点伤害。" % [coin_block, coin_block]})
+			na1_flags["na1_gold_prevent_round"] = completed_rounds
+			target["match_flags"] = na1_flags
+			_emit("damage_prevented", {"target_id": target_id, "amount": coin_block, "reason_id": "na1_gold", "message": "Na1 通过【金纵】失去1枚金币，抵消1点伤害；本整轮不再触发。"})
 	var ignores_armor := source_id >= 0 and source_id < players.size() and is_attack and (bool((players[source_id].get("flags", {}) as Dictionary).get("attacks_ignore_armor", false)) or _equipped_logical_id(source_id, "weapon") == "needle_new")
 	if kind != "true" and kind != "piercing" and final_amount > 0 and not ignores_armor:
 		var blocked: int = mini(int(target.get("armor", 0)), final_amount)

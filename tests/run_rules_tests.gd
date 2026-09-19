@@ -1658,16 +1658,16 @@ func _test_na1_gold_passive() -> void:
 	damage_state.players[1]["coins"] = 3
 	var health_before := int(damage_state.players[1].get("health", 0))
 	damage_state.call("_deal_damage", 1, 2, "piercing", 0, true)
-	_expect(int(damage_state.players[1].get("health", 0)) == health_before and int(damage_state.players[1].get("coins", 0)) == 1, "Na1 must spend coins to cancel piercing damage as documented.")
+	_expect(int(damage_state.players[1].get("health", 0)) == health_before - 1 and int(damage_state.players[1].get("coins", 0)) == 2, "Na1 must spend one coin to prevent one damage as documented.")
 	damage_state.call("_deal_damage", 1, 2, "true", -1, false)
-	_expect(int(damage_state.players[1].get("health", 0)) == health_before - 1 and int(damage_state.players[1].get("coins", 0)) == 0, "Na1 must spend remaining coins against true damage, then take any uncovered damage.")
+	_expect(int(damage_state.players[1].get("health", 0)) == health_before - 3 and int(damage_state.players[1].get("coins", 0)) == 2, "Na1 Gold Tactician must only prevent the first damaging hit each complete round.")
 
 	var income_state: RefCounted = MatchStateScript.new(rules, catalog, ["na1", "q", "ginger", "signal"], 135)
 	income_state.players[0]["coins"] = 10
 	income_state.call("_begin_turn")
-	_expect(int(income_state.players[0].get("coins", 0)) == 12, "Na1 must receive one coin per five held coins at the start of Na1's turn.")
+	_expect(int(income_state.players[0].get("coins", 0)) == 11, "Na1 must gain at most one coin per turn when holding at least five coins.")
 	income_state.call("_begin_turn")
-	_expect(int(income_state.players[0].get("coins", 0)) == 14, "Na1 must apply Gold Tactician again every turn using the current coin total.")
+	_expect(int(income_state.players[0].get("coins", 0)) == 12, "Na1 must apply the capped Gold Tactician income again on a later turn.")
 
 
 func _test_signal_limit_and_q_end_turn_guard() -> void:

@@ -24,7 +24,7 @@ English: Open **Settings → Language / 语言 → English**. The game remembers
 GODOT_BIN=/Users/jeff.jiang/Desktop/Godot.app/Contents/MacOS/Godot scripts/ci/verify.sh
 ```
 
-试玩反馈请使用 [GitHub 试玩反馈模板](https://github.com/jeffxuan/bengzhui-cards-demo/issues/new?template=playtest_feedback.yml)；崩溃或无法继续请使用 [Bug 模板](https://github.com/jeffxuan/bengzhui-cards-demo/issues/new?template=bug_report.yml)。请附上对局信息面板复制的种子、版本、阵容和胜因。
+试玩反馈可进入 [GitHub Discussions](https://github.com/jeffxuan/bengzhui-cards-demo/discussions)；崩溃或无法继续请使用 [Bug 模板](https://github.com/jeffxuan/bengzhui-cards-demo/issues/new?template=bug_report.yml)，规则与体验建议也可以使用 [试玩反馈模板](https://github.com/jeffxuan/bengzhui-cards-demo/issues/new?template=playtest_feedback.yml)。请附上对局信息面板复制的种子、版本、阵容和胜因。中英文招募帖与投放顺序见 [试玩招募与反馈投放包](docs/PLAYTEST_OUTREACH.md)。
 
 发布候选版还需运行 10000 局模拟、检查两个平台导出物，并完成 `docs/RELEASE_CHECKLIST.md` 中的真人与真实 Windows 验证。最新本地结果记录在 `docs/VERIFICATION.md`。
 

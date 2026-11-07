@@ -667,16 +667,18 @@ func _animate_new_cards(card_ids: Array[String]) -> void:
 		tween.tween_property(ghost, "position", destination, 0.26).set_delay(delay)
 		tween.tween_property(ghost, "scale", Vector2.ONE, 0.26).set_delay(delay)
 		tween.tween_property(ghost, "rotation", card.rotation, 0.26).set_delay(delay)
-		tween.finished.connect(func() -> void:
-			var live_card: HandCard = card_ref.get_ref() as HandCard
-			var live_ghost: HandCard = ghost_ref.get_ref() as HandCard
-			if live_card != null:
-				live_card.modulate = final_modulate
-			if live_ghost != null:
-				live_ghost.queue_free()
-		)
+		tween.finished.connect(_finish_new_card_animation.bind(card_ref, ghost_ref, final_modulate))
 		if remaining.is_empty():
 			break
+
+
+func _finish_new_card_animation(card_ref: WeakRef, ghost_ref: WeakRef, final_modulate: Color) -> void:
+	var live_card: HandCard = card_ref.get_ref() as HandCard
+	var live_ghost: HandCard = ghost_ref.get_ref() as HandCard
+	if live_card != null and is_instance_valid(live_card):
+		live_card.modulate = final_modulate
+	if live_ghost != null and is_instance_valid(live_ghost):
+		live_ghost.queue_free()
 
 
 func _queue_play_visual(event: Dictionary) -> void:

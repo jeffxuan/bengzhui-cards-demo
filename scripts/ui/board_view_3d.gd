@@ -105,12 +105,7 @@ func show_match_event(event: Dictionary) -> void:
 			storm_feedback.append({"player_id": strike_id, "start": Time.get_ticks_msec()})
 			_kick_camera()
 			var strike_position: Vector3 = (player_nodes[strike_id] as Node3D).position
-			get_tree().create_timer(0.72).timeout.connect(func() -> void:
-				if is_instance_valid(self) and not reduced_motion:
-					_spawn_skeleton_flash(strike_id)
-					_spawn_impact(strike_position, Color("b9e8ff"), true)
-					_kick_camera()
-			)
+			get_tree().create_timer(0.72).timeout.connect(_finish_thunderstorm_feedback.bind(strike_id, strike_position))
 			queue_redraw()
 		return
 	var player_id: int = int(payload.get("target_id", payload.get("player_id", -1)))
@@ -210,10 +205,7 @@ func _spawn_skeleton_flash(player_id: int) -> void:
 				flash_data["head"] = _bone_screen_position(skeleton, head_id)
 			# The cached 2D skeleton remains visible even while the original model is hidden.
 			model.visible = false
-			get_tree().create_timer(0.16).timeout.connect(func() -> void:
-				if is_instance_valid(model):
-					model.visible = true
-			)
+			get_tree().create_timer(0.16).timeout.connect(_restore_model_after_skeleton.bind(model))
 		skeleton_feedback.append(flash_data)
 	queue_redraw()
 
@@ -860,11 +852,25 @@ func _play_actor_animation(player_id: int, animation_name: String) -> void:
 		if animation_player.has_animation(animation_name):
 			animation_player.play(animation_name)
 			if animation_name != "Idle":
-				get_tree().create_timer(0.38).timeout.connect(func() -> void:
-					if is_instance_valid(animation_player):
-						animation_player.play("Idle")
-				)
+				get_tree().create_timer(0.38).timeout.connect(_return_animation_to_idle.bind(animation_player))
 			return
+
+
+func _finish_thunderstorm_feedback(strike_id: int, strike_position: Vector3) -> void:
+	if is_instance_valid(self) and not reduced_motion:
+		_spawn_skeleton_flash(strike_id)
+		_spawn_impact(strike_position, Color("b9e8ff"), true)
+		_kick_camera()
+
+
+func _restore_model_after_skeleton(model: Node3D) -> void:
+	if model != null and is_instance_valid(model):
+		model.visible = true
+
+
+func _return_animation_to_idle(animation_player: AnimationPlayer) -> void:
+	if animation_player != null and is_instance_valid(animation_player):
+		animation_player.play("Idle")
 
 
 func _resize_viewport() -> void:

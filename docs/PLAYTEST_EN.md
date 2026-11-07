@@ -2,11 +2,13 @@
 
 A single-player tactical card arena made with Godot 4.6.3. Choose one of 8 characters and face 3 AI opponents. This is a development playtest; balance and some complex effects are still being refined.
 
+Download the current build from the [v0.1.0-dev.8 release](https://github.com/jeffxuan/bengzhui-cards-demo/releases/tag/v0.1.0-dev.8). Use the [GitHub Discussions feedback hub](https://github.com/jeffxuan/bengzhui-cards-demo/discussions) for rules and experience feedback.
+
 ## Language
 
 Open Settings (设置), then select English under Language / 语言. Your choice is saved. You can change languages during a match without restarting it.
 
-The language update is currently in the local project. Previously published dev.7 packages do not include it yet.
+The published dev.8 packages include the language switch and the complete English content pass. Older packages may not be compatible with current saves.
 
 ## How to play
 

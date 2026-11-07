@@ -19,6 +19,7 @@
 
 ## 反馈方式
 
+- [试玩反馈中心（GitHub Discussions）](https://github.com/jeffxuan/bengzhui-cards-demo/discussions)
 - [提交试玩反馈](https://github.com/jeffxuan/bengzhui-cards-demo/issues/new?template=playtest_feedback.yml)
 - [报告 Bug](https://github.com/jeffxuan/bengzhui-cards-demo/issues/new?template=bug_report.yml)
 

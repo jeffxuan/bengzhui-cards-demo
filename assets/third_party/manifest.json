@@ -43,6 +43,84 @@
       "usage": "Card, damage, defeat and board-collapse feedback",
       "modifications": "Selected five variants each from the soft-medium, metal-light and wood-heavy families; audio is otherwise unchanged.",
       "archive_sha256": "029d734af1582474edf3a694d1b0cebc97c1c152f2f39fa34d4c2bafc5de77f8"
+    },
+    {
+      "name": "Godot Demo Projects 2D Particles spark texture",
+      "author": "Godot Engine contributors",
+      "source": "https://github.com/godotengine/godot-demo-projects/blob/master/2d/particles/spark_particle2.png",
+      "revision": "15d4fcd70a429dfd455d6fce9d0cd004abd07373",
+      "retrieved": "2026-09-25",
+      "license": "MIT",
+      "license_file": "godot_demo_particles/LICENSE.md",
+      "usage": "Battle hit sparks on the board",
+      "modifications": "None; tinted and scaled at runtime.",
+      "sha256": "56c8790dae2ca82df95a5ad3a7930a8f8582cf5b6f645ad080bea8bf57cce23d"
+    },
+    {
+      "name": "KayKit Adventurers",
+      "author": "Kay Lousberg",
+      "source": "https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0",
+      "revision": "672074b73ba276876a19e8816ecdc5241817ab47",
+      "retrieved": "2026-09-25",
+      "license": "CC0-1.0",
+      "license_file": "kaykit_adventurers/LICENSE.txt",
+      "usage": "Animated 3D player pieces on the game board",
+      "modifications": "Five GLB models selected; scaled and animated at runtime.",
+      "files_sha256": {
+        "Barbarian.glb": "cefc311a0e10c7858b6141f5ada7e33268727564fb8ac1347aab97d000669cc6",
+        "Knight.glb": "60428e3abc09ba83e595d256e3af8c5c976b46cdae599f0802fc82b4a3445168",
+        "Mage.glb": "cf898585da33fab50c724d31605fb931eb2912e6d2280092141e98ca81ad507d",
+        "Rogue.glb": "e825437cd4d2ee9c1960b517a74a69101e33eb409ae7fa8cedc7134a998fbb7d",
+        "Rogue_Hooded.glb": "93e6e25213009952276d9cf34f5d96a243767334c66f280db0433ddfabb91545",
+        "Barbarian_barbarian_texture.png": "7329b2ff9709e8d54c886d5ef49c08bd42b12be3bbb2facb1488a6b48b1e8a80",
+        "Knight_knight_texture.png": "5d250ccc5da020e6126bfa3839f83bd9a465a951ed223e4d13c08b1925e154d4",
+        "Mage_mage_texture.png": "ea49f094b960402635fe51db9f1864960c97271b17f2e3554e5aca1b2bbba144",
+        "Rogue_rogue_texture.png": "a4032e877c3b91939f5cdbb630349c1998fdbc3211bbd587c111125500fe4cc5",
+        "Rogue_Hooded_rogue_texture.png": "a4032e877c3b91939f5cdbb630349c1998fdbc3211bbd587c111125500fe4cc5"
+      }
+    },
+    {
+      "name": "KayKit Dungeon Remastered 1.0",
+      "author": "Kay Lousberg",
+      "source": "https://github.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0",
+      "revision": "b0ca9bd96a8072ab36a3a5464f00ed1e06a16d07",
+      "retrieved": "2026-09-25",
+      "license": "CC0-1.0",
+      "license_file": "kaykit_dungeon/LICENSE.txt",
+      "usage": "3D floor, hazards, treasure, event chests and board corners",
+      "modifications": "Eight GLB models selected; floor material tinted and models scaled at runtime.",
+      "files_sha256": {
+        "chest_gold.glb": "04708d5f88ed59d361c8a6cec1efe8b7028dbc641dfae0a1467f272e14a94b6e",
+        "coin_stack_small.gltf.glb": "b7395adb0c3f8d392f42f483d667af672232a25de4e0cdb23c58fca8bab1dd8f",
+        "column.gltf.glb": "761adf0fcc1a86ab1c42740b7a8ad340d73982f94257e7892b2c7998f98c304e",
+        "floor_tile_big_spikes.glb": "7a4e94decf860b64456a45cc1d2bb26f0b3ca75824ccf2c4d0addee088d9ad",
+        "floor_tile_small.gltf.glb": "645f02c82d1fa15e3e1daa7892b70c8a9d44f44d0e520d76ae6afd08633c5b34",
+        "floor_tile_small_broken_A.gltf.glb": "d1acc3407f941623b3b01ec9a1751c36a5ca82bb14721fc8f28e5559317edad4",
+        "floor_tile_small_broken_B.gltf.glb": "0ef8ee472371df027f7035726f913335f3d82df531004329f3c8bce77fcce1d5",
+        "floor_tile_small_decorated.gltf.glb": "4dd8a74dc00c2272957938f1612c730e06bfddca7a9d9cdc6f316594d4a0f3cf"
+      }
+    },
+    {
+      "name": "Kenney Mini Dungeon 2.0",
+      "author": "Kenney",
+      "source": "https://kenney.nl/assets/mini-dungeon",
+      "retrieved": "2026-09-25",
+      "license": "CC0-1.0",
+      "license_file": "kenney_mini_dungeon/License.txt",
+      "usage": "Retained source models from the 3D board visual prototype",
+      "modifications": "Selected GLB models and colormap from the archive; not used by the current board.",
+      "archive_sha256": "19c4648680cb1d2e8836cade96cbf9781c0c1f45fbc6d2ce41cee8239a3ec4d8"
+    },
+    {
+      "name": "Kenney Particle Pack 1.1",
+      "author": "Kenney Vleugels; additional filter templates by Indigo Ray, Craig Nisbet, Zoltan Erdokovy, Heliagon, ThreeDee, Killst4r and Tim2501",
+      "source": "https://kenney.nl/assets/particle-pack",
+      "retrieved": "2026-10-06",
+      "license": "CC0-1.0",
+      "license_file": "kenney_particle_pack/License.txt",
+      "usage": "Q 雷暴云层、闪光和命中粒子",
+      "modifications": "Selected smoke, light and spark PNGs; tinted, scaled and animated at runtime.",
+      "archive_sha256": "b631d4b07f7002549fdcf155f01141ad482f79f3440e4e301eed49ce5f1d8958"
     }
   ]
 }

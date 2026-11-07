@@ -56,9 +56,12 @@ func play_match_event(event: Dictionary) -> void:
 			_play_variant("soft", SOFT_SOUNDS)
 		"damage":
 			if int(payload.get("amount", 0)) > 0:
-				_play_variant("metal", METAL_SOUNDS)
+				_play_variant("soft", SOFT_SOUNDS, -10.0, 0.80)
+				_play_variant("metal", METAL_SOUNDS, -2.0, 0.92)
+			else:
+				_play_variant("metal", METAL_SOUNDS, -8.0, 1.25)
 		"defeated", "board_collapsed", "match_finished":
-			_play_variant("heavy", HEAVY_SOUNDS)
+			_play_variant("heavy", HEAVY_SOUNDS, -1.0, 0.85)
 		"duel_pressure_changed":
 			_play(ACCEPTED_SOUND)
 
@@ -67,16 +70,22 @@ func play_confirmation() -> void:
 	_play(ACCEPTED_SOUND)
 
 
-func _play_variant(group: String, streams: Array[AudioStream]) -> void:
+func play_draw() -> void:
+	_play_variant("soft", SOFT_SOUNDS, -9.0, 1.18)
+
+
+func _play_variant(group: String, streams: Array[AudioStream], volume_db: float = 0.0, pitch: float = 1.0) -> void:
 	var cursor := int(sound_cursors.get(group, 0))
-	_play(streams[cursor % streams.size()])
+	_play(streams[cursor % streams.size()], volume_db, pitch)
 	sound_cursors[group] = cursor + 1
 
 
-func _play(stream: AudioStream) -> void:
+func _play(stream: AudioStream, volume_db: float = 0.0, pitch: float = 1.0) -> void:
 	if channels.is_empty() or DisplayServer.get_name() == "headless":
 		return
 	var channel := channels[channel_cursor % channels.size()]
 	channel_cursor += 1
 	channel.stream = stream
+	channel.volume_db = volume_db
+	channel.pitch_scale = pitch
 	channel.play()

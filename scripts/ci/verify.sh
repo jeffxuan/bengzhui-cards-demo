@@ -41,8 +41,11 @@ run_check() {
 run_check compile "" --editor --quit
 run_check rules RULE_TESTS_OK --script res://tests/run_rules_tests.gd
 run_check saves SAVE_TESTS_OK --script res://tests/run_save_tests.gd
+run_check localization LOCALIZATION_OK --script res://tests/run_localization_tests.gd
 run_check ui UI_SMOKE_OK --script res://tests/run_ui_smoke.gd
+run_check ui-english UI_SMOKE_OK --script res://tests/run_ui_smoke.gd -- --language=en
+run_check card-motion CARD_MOTION_OK --script res://tests/run_card_motion_smoke.gd
 run_check export-smoke EXPORT_SMOKE_OK -- --export-smoke
 run_check simulation SIMULATION_OK --script res://tests/run_simulation.gd -- --matches="$SIMULATION_MATCHES"
 
-echo "VERIFY_OK: compile, rules, saves, UI, export smoke, and $SIMULATION_MATCHES simulations passed."
+echo "VERIFY_OK: compile, rules, saves, localization, Chinese/English UI, card motion, export smoke, and $SIMULATION_MATCHES simulations passed."

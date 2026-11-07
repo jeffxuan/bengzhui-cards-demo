@@ -9,7 +9,8 @@ const DEFAULT_SETTINGS: Dictionary = {
 	"master_volume": 0.8,
 	"text_scale": 1.0,
 	"reduced_motion": false,
-	"tutorial_seen": false
+	"tutorial_seen": false,
+	"language": "zh_CN"
 }
 
 
@@ -91,6 +92,7 @@ static func _sanitize_settings(settings: Dictionary) -> Dictionary:
 	sanitized["text_scale"] = clampf(float(settings.get("text_scale", 1.0)), 0.85, 1.35)
 	sanitized["reduced_motion"] = bool(settings.get("reduced_motion", false))
 	sanitized["tutorial_seen"] = bool(settings.get("tutorial_seen", false))
+	sanitized["language"] = "en" if settings.get("language", "zh_CN") == "en" else "zh_CN"
 	return sanitized
 
 
@@ -98,7 +100,8 @@ static func _settings_types_are_valid(settings: Dictionary) -> bool:
 	return _is_number(settings.get("master_volume")) \
 		and _is_number(settings.get("text_scale")) \
 		and settings.get("reduced_motion") is bool \
-		and settings.get("tutorial_seen") is bool
+		and settings.get("tutorial_seen") is bool \
+		and (not settings.has("language") or settings.get("language") is String)
 
 
 static func _is_number(value: Variant) -> bool:

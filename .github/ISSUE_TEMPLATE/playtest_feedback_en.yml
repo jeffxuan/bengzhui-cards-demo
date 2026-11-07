@@ -1,0 +1,53 @@
+name: Playtest feedback (English)
+description: Share what was fun, confusing, or worth improving in a complete playthrough
+title: "[Playtest] "
+labels: ["playtest"]
+body:
+  - type: textarea
+    id: debug
+    attributes:
+      label: Match debug information
+      description: Copy this from the Match details panel in the top bar.
+    validations:
+      required: true
+  - type: input
+    id: duration
+    attributes:
+      label: Match duration
+      placeholder: 12 minutes 30 seconds
+    validations:
+      required: true
+  - type: dropdown
+    id: language
+    attributes:
+      label: Language
+      options: ["English", "简体中文"]
+    validations:
+      required: true
+  - type: dropdown
+    id: clarity
+    attributes:
+      label: How clear were the rules?
+      options: ["Clear", "Partly clear", "Confusing"]
+    validations:
+      required: true
+  - type: textarea
+    id: best_moment
+    attributes:
+      label: Best moment
+      description: What moment felt most satisfying or exciting?
+    validations:
+      required: true
+  - type: textarea
+    id: friction
+    attributes:
+      label: Friction or boredom
+      description: Where did you feel lost, bored, or unable to act?
+    validations:
+      required: true
+  - type: textarea
+    id: other
+    attributes:
+      label: Other feedback
+    validations:
+      required: false

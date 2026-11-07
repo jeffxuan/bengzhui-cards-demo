@@ -6,6 +6,7 @@ const MatchStateScript = preload("res://scripts/core/match_state.gd")
 
 var match_count: int = 100
 const MAX_COMMANDS_PER_MATCH: int = 400
+const MAX_ROUNDS_PER_MATCH: int = 30
 
 
 func _init() -> void:
@@ -41,10 +42,9 @@ func _init() -> void:
 		var state: RefCounted = MatchStateScript.new(rules, catalog, roster, 1000 + match_index)
 		var ai: RefCounted = AIControllerScript.new()
 		var command_count: int = 0
-		# Multi-step effects (targeting, discards, and responses) are each submitted as
-		# commands. Keep this guard above the maximum normal 20-round resolution while
-		# retaining the round cap as the actual no-progress detector.
-		while not bool(state.get("finished")) and command_count < MAX_COMMANDS_PER_MATCH and int(state.get("completed_rounds")) <= 20:
+		# The game has no round-limit victory. This is only a simulation deadlock guard;
+		# commands remain the primary protection against an effect-resolution loop.
+		while not bool(state.get("finished")) and command_count < MAX_COMMANDS_PER_MATCH and int(state.get("completed_rounds")) <= MAX_ROUNDS_PER_MATCH:
 			var actor_id: int
 			var pending_action: Dictionary = state.get("pending_action") as Dictionary
 			var pending_discard: Dictionary = state.get("pending_discard") as Dictionary

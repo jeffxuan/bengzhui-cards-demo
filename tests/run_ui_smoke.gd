@@ -15,6 +15,8 @@ func _init() -> void:
 
 
 func _run() -> void:
+	var original_settings: Dictionary = SaveServiceScript.load_settings().duplicate(true)
+	var english_mode: bool = OS.get_cmdline_user_args().has("--language=en")
 	var original_replay_exists: bool = FileAccess.file_exists(ProjectSettings.globalize_path(SaveServiceScript.REPLAY_PATH))
 	var original_replay_contents: String = FileAccess.get_file_as_string(ProjectSettings.globalize_path(SaveServiceScript.REPLAY_PATH)) if original_replay_exists else ""
 	var packed_scene: PackedScene = load("res://scenes/Main.tscn") as PackedScene
@@ -28,7 +30,6 @@ func _run() -> void:
 		root.add_child(main)
 		await process_frame
 		await process_frame
-		var original_settings: Dictionary = (main.get("settings") as Dictionary).duplicate(true)
 		main.call("_set_text_scale", 1.35)
 		main.call("_show_character_select", "对局存档已损坏，无法读取。 副本已保留为 resume_match.json.invalid。")
 		await process_frame
@@ -67,6 +68,17 @@ func _run() -> void:
 		_expect(end_turn != null and end_turn.is_visible_in_tree(), "End-turn command must remain visible at %s." % str(viewport_size))
 		_expect(audio_feedback != null and audio_feedback.get_child_count() == 6, "Audio feedback channels must be ready at %s." % str(viewport_size))
 		_expect(_has_suit_and_rank_button(hand_box), "The opening hand must visibly show a suit symbol and A-10/J/Q/K rank at %s." % str(viewport_size))
+		_expect(_has_hand_card_with_details(hand_box), "Hand cards must show title, category, suit, cost and range at %s." % str(viewport_size))
+		if english_mode:
+			_check_english_surface(main)
+		board.call("show_match_event", {"type": "damage", "payload": {"target_id": 1, "amount": 2}})
+		_expect((board.get("feedback") as Array).size() == 1, "Damage must create board feedback at %s." % str(viewport_size))
+		if viewport_size == VIEWPORT_SIZES[0] and DisplayServer.get_name() != "headless" and not OS.get_environment("BENGZHUI_UI_CAPTURE").is_empty():
+			var capture_delay: float = float(OS.get_environment("BENGZHUI_UI_CAPTURE_DELAY")) if not OS.get_environment("BENGZHUI_UI_CAPTURE_DELAY").is_empty() else 0.10
+			await create_timer(capture_delay).timeout
+			await process_frame
+			root.get_texture().get_image().save_png(OS.get_environment("BENGZHUI_UI_CAPTURE"))
+		_test_board_projection(board, main.get("state") as RefCounted, viewport_size)
 		_expect(_has_button_containing(skill_box, "每回合限1次"), "K's once-per-turn skill limit must be visible at %s." % str(viewport_size))
 		_expect(_has_button_containing(skill_box, "本局每职业限1次"), "K's per-profession match limit must be visible at %s." % str(viewport_size))
 		_expect(_is_visible_enabled_button(root.gui_get_focus_owner()), "Match HUD must retain a usable keyboard focus target at %s." % str(viewport_size))
@@ -77,6 +89,15 @@ func _run() -> void:
 		var modal_layer: ColorRect = main.get("modal_layer") as ColorRect
 		_expect(bool(main.get("settings_open")) and modal_layer != null and modal_layer.is_visible_in_tree(), "Escape must open settings at %s." % str(viewport_size))
 		_expect(root.gui_get_focus_owner() is HSlider, "Settings must focus the first keyboard-adjustable control at %s." % str(viewport_size))
+		if english_mode:
+			var match_state: RefCounted = main.get("state") as RefCounted
+			var snapshot: Dictionary = (match_state.call("deterministic_snapshot") as Dictionary).duplicate(true)
+			main.call("_set_language", 0)
+			_expect(TranslationServer.translate("结束回合") == "结束回合", "Settings must restore Chinese immediately.")
+			main.call("_set_language", 1)
+			_expect(TranslationServer.translate("结束回合") == "End turn", "Settings must restore English immediately.")
+			_expect(SaveServiceScript.load_settings().get("language") == "en", "Language choice must be saved.")
+			_expect(match_state.call("deterministic_snapshot") == snapshot, "Live language switching must preserve the complete match state.")
 		main.call("_unhandled_key_input", _key_event(KEY_ESCAPE))
 		await process_frame
 		await process_frame
@@ -97,12 +118,16 @@ func _run() -> void:
 		_expect(end_turn != null and end_turn.is_visible_in_tree() and _inside_viewport(end_turn, viewport_size), "End-turn control must remain on-screen at maximum text scale at %s (rect %s)." % [str(viewport_size), str(end_turn.get_global_rect() if end_turn != null else Rect2())])
 		main.call("_open_debug_info")
 		await process_frame
+		if english_mode:
+			_check_english_surface(main)
 		var modal_description: Label = main.get("modal_description") as Label
 		_expect(modal_description != null and modal_description.text.contains("种子"), "Debug panel must expose the match seed at %s." % str(viewport_size))
 		main.call("_close_debug_info")
 		await process_frame
 		main.call("_open_tutorial")
 		await process_frame
+		if english_mode:
+			_check_english_surface(main)
 		var modal_actions: VBoxContainer = main.get("modal_actions") as VBoxContainer
 		var tutorial_close: Button = modal_actions.get_child(0) as Button
 		tutorial_close.pressed.emit()
@@ -118,6 +143,17 @@ func _run() -> void:
 		await process_frame
 	_restore_replay(original_replay_exists, original_replay_contents)
 	_finish()
+
+
+func _check_english_surface(node: Node) -> void:
+	if node is Control and (node as Control).is_visible_in_tree():
+		if node is Label or node is Button or node is RichTextLabel:
+			var source := String(node.get("text"))
+			var translated := String(TranslationServer.translate(source))
+			var cjk := RegEx.create_from_string("[\\x{3400}-\\x{9fff}]")
+			_expect(cjk.search(translated) == null, "Visible English UI must not contain untranslated text: " + translated)
+	for child: Node in node.get_children():
+		_check_english_surface(child)
 
 
 func _count_buttons(node: Node) -> int:
@@ -154,6 +190,20 @@ func _test_board_keyboard(board: Control, main: Control, viewport_size: Vector2i
 	var opponent_position: Vector2i = (match_state.call("player", 1) as Dictionary).get("position", Vector2i.ZERO) as Vector2i
 	_expect(root.gui_get_focus_owner() == board and board.get("keyboard_cell") == opponent_position, "Target selection must focus the first legal player at %s." % str(viewport_size))
 	main.call("_refresh_interactions")
+
+
+func _test_board_projection(board: Control, match_state: RefCounted, viewport_size: Vector2i) -> void:
+	if not board is BoardView3D:
+		return
+	var cells: Array[Vector2i] = [Vector2i(0, 0), Vector2i(7, 7), Vector2i(14, 14)]
+	for player_value: Variant in match_state.get("players") as Array:
+		var player_state: Dictionary = player_value as Dictionary
+		if bool(player_state.get("alive", false)):
+			cells.append(player_state.get("position", Vector2i.ZERO) as Vector2i)
+	for cell: Vector2i in cells:
+		var world_position: Vector3 = board.call("_world_position", cell) as Vector3
+		var screen_position: Vector2 = board.call("_screen_position", world_position) as Vector2
+		_expect(board.call("_cell_at", screen_position) == cell, "3D pointer must select projected cell %s at %s." % [str(cell), str(viewport_size)])
 
 
 func _first_empty_board_cell(match_state: RefCounted) -> Vector2i:
@@ -193,6 +243,15 @@ func _has_suit_and_rank_button(node: Node) -> bool:
 	for child: Node in node.get_children():
 		if child is Button and identity_pattern.search((child as Button).text) != null:
 			return true
+	return false
+
+
+func _has_hand_card_with_details(node: Node) -> bool:
+	for child: Node in node.get_children():
+		if child is HandCard and child.get_child_count() == 1:
+			var content: VBoxContainer = child.get_child(0) as VBoxContainer
+			if content != null and content.get_child_count() == 4 and content.get_child(0) is HBoxContainer and content.get_child(3) is HBoxContainer:
+				return true
 	return false
 
 

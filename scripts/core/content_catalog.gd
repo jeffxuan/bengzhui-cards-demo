@@ -14,7 +14,7 @@ const SUPPORTED_EFFECTS: Array[String] = [
 	"status", "remove_status", "cleanse", "coins", "extra_action", "extra_move",
 	"push", "break_armor", "steal_card", "self_discard", "discard_or_damage",
 	"recover_last_card", "reveal_hand", "equip", "negate", "reflect", "modifier", "provisional",
-	"max_resource", "damage_missing_health", "trigger_event", "turn_flag", "double_armor",
+	"max_resource", "max_health", "damage_missing_health", "trigger_event", "turn_flag", "double_armor",
 	"iron_wall", "next_attack_damage_bonus", "attack_cost_discount", "draw_if_turn_attack_count",
 	"draw_if_below_half_health", "assassinate_damage", "radial_push", "gaze_next_turn",
 	"transform_rightmost", "guard_next_damage"
@@ -383,7 +383,7 @@ func _load_all() -> void:
 				staged_card["target"] = "enemy"
 				staged_card["ignore_distance"] = true
 				staged_card["unanswerable"] = true
-				staged_card["effects"] = [{"op": "max_resource", "resource": "stamina", "amount": -2}]
+				staged_card["effects"] = [{"op": "max_health", "amount": -2}]
 			"bloodbath_new":
 				staged_card["target"] = "enemy"
 				staged_card["effects"] = [{"op": "damage_missing_health", "maximum": 4, "kind": "normal"}, {"op": "self_damage", "amount": 1, "kind": "true"}]

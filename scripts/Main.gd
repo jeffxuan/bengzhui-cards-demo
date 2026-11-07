@@ -2,11 +2,13 @@ extends Control
 
 const AIControllerScript = preload("res://scripts/core/ai_controller.gd")
 const AudioFeedbackScript = preload("res://scripts/ui/audio_feedback.gd")
-const BoardViewScript = preload("res://scripts/ui/board_view.gd")
+const BoardViewScript = preload("res://scripts/ui/board_view_3d.gd")
+const HandCardScript = preload("res://scripts/ui/hand_card.gd")
 const ContentCatalogScript = preload("res://scripts/core/content_catalog.gd")
 const MatchCommandScript = preload("res://scripts/core/match_command.gd")
 const MatchStateScript = preload("res://scripts/core/match_state.gd")
 const SaveServiceScript = preload("res://scripts/core/save_service.gd")
+const LocalizationScript = preload("res://scripts/ui/localization.gd")
 
 const COLORS: Dictionary = {
 	"void": Color("0b0c0f"),
@@ -40,6 +42,9 @@ var ai_running: bool = false
 var settings_open: bool = false
 var character_buttons: Dictionary = {}
 var discard_selected_indices: Array[int] = []
+var last_hand_ids: Array[String] = []
+var hand_initialized: bool = false
+var pending_card_visuals: Array[Dictionary] = []
 
 var screen_root: Control
 var character_detail_label: Label
@@ -54,7 +59,9 @@ var skill_box: VBoxContainer
 var market_box: VBoxContainer
 var opponents_box: VBoxContainer
 var hand_box: HBoxContainer
+var hand_scroll: ScrollContainer
 var hand_band: Control
+var card_motion_layer: Control
 var log_label: RichTextLabel
 var end_turn_button: Button
 var modal_layer: ColorRect
@@ -71,6 +78,11 @@ func _ready() -> void:
 	ui_font = load("res://assets/third_party/noto_sans_sc/NotoSansSC-Variable.ttf") as Font
 	var settings_result: Dictionary = SaveServiceScript.load_settings_result()
 	settings = settings_result.get("settings", {}) as Dictionary
+	for argument: String in OS.get_cmdline_user_args():
+		if argument.begins_with("--language="):
+			settings["language"] = argument.trim_prefix("--language=")
+	LocalizationScript.set_language(String(settings.get("language", "zh_CN")))
+	DisplayServer.window_set_title(LocalizationScript.text("崩坠牌局"))
 	theme = _build_theme(float(settings.get("text_scale", 1.0)))
 	_apply_audio_settings()
 	audio_feedback = AudioFeedbackScript.new() as AudioFeedback
@@ -85,6 +97,11 @@ func _ready() -> void:
 
 
 func _run_export_smoke() -> void:
+	LocalizationScript.set_language("en")
+	if LocalizationScript.text("结束回合") != "End turn":
+		push_error("EXPORT_SMOKE_FAILED: English localization is missing")
+		get_tree().quit(1)
+		return
 	var smoke_catalog: RefCounted = ContentCatalogScript.new()
 	var smoke_rules: Dictionary = _load_json("res://rules/match_rules.json")
 	if not bool(smoke_catalog.call("is_valid")):
@@ -281,6 +298,9 @@ func _continue_match() -> void:
 
 func _build_match_screen() -> void:
 	_clear_screen()
+	last_hand_ids.clear()
+	hand_initialized = false
+	pending_card_visuals.clear()
 	selected_target_commands.clear()
 	move_commands.clear()
 	var background: ColorRect = _background()
@@ -299,11 +319,16 @@ func _build_match_screen() -> void:
 	board_view.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	board_view.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	board_view.set_match_state(state)
+	board_view.set_reduced_motion(bool(settings.get("reduced_motion", false)))
 	board_view.cell_selected.connect(_on_board_cell_selected)
 	board_view.player_selected.connect(_on_board_player_selected)
 	body.add_child(board_view)
 	body.add_child(_sidebar_scroll(_build_right_sidebar(), 285))
 	page.add_child(_build_hand_band())
+	card_motion_layer = Control.new()
+	card_motion_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	card_motion_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	screen_root.add_child(card_motion_layer)
 	_build_modal_layer()
 	end_turn_button.grab_focus.call_deferred()
 
@@ -319,10 +344,12 @@ func _build_top_bar() -> Control:
 	bar.add_child(title)
 	summary_label = _label("", 17, COLORS["muted"] as Color)
 	summary_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	bar.add_child(summary_label)
 	action_hint_label = _label("", 15, COLORS["gold"] as Color)
 	action_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	action_hint_label.custom_minimum_size.x = 240
+	action_hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	bar.add_child(action_hint_label)
 	var settings_button: Button = Button.new()
 	settings_button.icon = load("res://assets/third_party/lucide/settings.svg") as Texture2D
@@ -430,6 +457,7 @@ func _build_hand_band() -> Control:
 	row.add_child(hand_column)
 	hand_column.add_child(_section_label("手牌 · 花色 / 点数"))
 	var scroll: ScrollContainer = ScrollContainer.new()
+	hand_scroll = scroll
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -560,24 +588,153 @@ func _refresh_hand() -> void:
 	var display_hand: Array = (human.get("hand", []) as Array).duplicate()
 	var purchased_count: int = (human.get("purchased_hand", []) as Array).size()
 	display_hand.append_array(human.get("purchased_hand", []) as Array)
+	var current_ids: Array[String] = []
+	for value: Variant in display_hand:
+		current_ids.append(String(value))
+	var newly_drawn: Array[String] = []
+	if hand_initialized:
+		var previous: Array[String] = last_hand_ids.duplicate()
+		for card_id: String in current_ids:
+			if previous.has(card_id):
+				previous.erase(card_id)
+			else:
+				newly_drawn.append(card_id)
+	last_hand_ids = current_ids
+	hand_initialized = true
 	for card_index: int in display_hand.size():
 		var card_value: Variant = display_hand[card_index]
 		var card_id: String = String(card_value)
 		var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
-		var button: Button = Button.new()
-		button.custom_minimum_size = Vector2(250, 76)
-		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		var button: HandCard = HandCardScript.new() as HandCard
 		var source_label: String = " · 商店保留" if card_index >= display_hand.size() - purchased_count else ""
 		var identity_badge := _card_identity_badge(definition)
 		var identity_prefix := "%s · " % identity_badge if not identity_badge.is_empty() else "旧版牌 · "
 		button.text = "%s%s%s\n%s · %s" % [identity_prefix, String(definition.get("name", card_id)), source_label, _cost_text(definition), _range_text(definition, 0)]
-		button.icon = _category_icon(String(definition.get("category", "")))
+		button.configure(definition, identity_badge, _cost_text(definition), _range_text(definition, 0), not source_label.is_empty(), float(settings.get("text_scale", 1.0)))
 		button.tooltip_text = "%s\n%s\n%s · %s\n%s" % [String(definition.get("name", card_id)), _card_identity_text(definition), _cost_text(definition), _range_text(definition, 0), String(definition.get("description", ""))]
 		var playable := _has_definition_command(legal, MatchCommandScript.PLAY_CARD, card_id)
 		var range_preview_available := String(definition.get("category", "")) == "attack" and _required_actor_id() == 0
 		button.disabled = not playable and not range_preview_available
+		button.modulate = Color.WHITE if not button.disabled else Color(0.62, 0.66, 0.70)
+		button.set_meta("card_id", card_id)
+		var selected_card: bool = false
+		for target_command: Dictionary in selected_target_commands:
+			var target_payload: Dictionary = target_command.get("payload", {}) as Dictionary
+			if String(target_command.get("type", "")) == MatchCommandScript.PLAY_CARD and String(target_payload.get("card_id", "")) == card_id:
+				selected_card = true
+				break
+		button.set_pose(deg_to_rad(clampf(float(card_index) - float(display_hand.size() - 1) * 0.5, -4.0, 4.0) * 1.2), selected_card, bool(settings.get("reduced_motion", false)))
 		button.pressed.connect(_select_card.bind(card_id))
 		hand_box.add_child(button)
+	if not newly_drawn.is_empty():
+		if audio_feedback != null:
+			audio_feedback.play_draw()
+		if not bool(settings.get("reduced_motion", false)):
+			_animate_new_cards.call_deferred(newly_drawn)
+
+
+func _animate_new_cards(card_ids: Array[String]) -> void:
+	if card_motion_layer == null or not is_instance_valid(card_motion_layer):
+		return
+	await get_tree().process_frame
+	if card_motion_layer == null or not is_instance_valid(card_motion_layer) or bool(settings.get("reduced_motion", false)):
+		return
+	if hand_box.size.x > hand_scroll.size.x:
+		hand_scroll.scroll_horizontal = int(hand_box.size.x - hand_scroll.size.x)
+		await get_tree().process_frame
+	var remaining: Array[String] = card_ids.duplicate()
+	for child: Node in hand_box.get_children():
+		if not child is HandCard or not remaining.has(String(child.get_meta("card_id", ""))):
+			continue
+		var card_id: String = String(child.get_meta("card_id", ""))
+		remaining.erase(card_id)
+		var card: HandCard = child as HandCard
+		var destination: Vector2 = card.global_position - card_motion_layer.global_position
+		var origin: Vector2 = hand_band.get_global_rect().position - card_motion_layer.global_position + Vector2(18, 16)
+		var ghost: HandCard = _make_card_ghost(card_id)
+		ghost.position = origin
+		ghost.rotation = -0.16
+		ghost.scale = Vector2.ONE * 0.42
+		ghost.modulate.a = 0.0
+		card.modulate.a = 0.0
+		var final_modulate: Color = Color.WHITE if not card.disabled else Color(0.62, 0.66, 0.70)
+		var card_ref: WeakRef = weakref(card)
+		var ghost_ref: WeakRef = weakref(ghost)
+		var tween: Tween = create_tween().set_parallel(true)
+		tween.set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
+		var delay: float = float(card_ids.size() - remaining.size() - 1) * 0.045
+		tween.tween_property(ghost, "modulate:a", 1.0, 0.04).set_delay(delay)
+		tween.tween_property(ghost, "position", destination, 0.26).set_delay(delay)
+		tween.tween_property(ghost, "scale", Vector2.ONE, 0.26).set_delay(delay)
+		tween.tween_property(ghost, "rotation", card.rotation, 0.26).set_delay(delay)
+		tween.finished.connect(_finish_new_card_animation.bind(card_ref, ghost_ref, final_modulate))
+		if remaining.is_empty():
+			break
+
+
+func _finish_new_card_animation(card_ref: WeakRef, ghost_ref: WeakRef, final_modulate: Color) -> void:
+	var live_card: HandCard = card_ref.get_ref() as HandCard
+	var live_ghost: HandCard = ghost_ref.get_ref() as HandCard
+	if live_card != null and is_instance_valid(live_card):
+		live_card.modulate = final_modulate
+	if live_ghost != null and is_instance_valid(live_ghost):
+		live_ghost.queue_free()
+
+
+func _queue_play_visual(event: Dictionary) -> void:
+	if card_motion_layer == null or not is_instance_valid(card_motion_layer) or bool(settings.get("reduced_motion", false)):
+		return
+	if String(event.get("type", "")) != "card_played":
+		return
+	var payload: Dictionary = event.get("payload", {}) as Dictionary
+	if int(payload.get("player_id", -1)) != 0:
+		return
+	var card_id: String = String(payload.get("card_id", ""))
+	for child: Node in hand_box.get_children():
+		if child is HandCard and child.visible and String(child.get_meta("card_id", "")) == card_id:
+			pending_card_visuals.append({"card_id": card_id, "source": (child as HandCard).global_position, "target_id": int(payload.get("target_id", -1))})
+			return
+
+
+func _animate_played_cards() -> void:
+	if card_motion_layer == null or not is_instance_valid(card_motion_layer) or bool(settings.get("reduced_motion", false)):
+		pending_card_visuals.clear()
+		return
+	for visual: Dictionary in pending_card_visuals:
+		var card_id: String = String(visual.get("card_id", ""))
+		var ghost: HandCard = _make_card_ghost(card_id)
+		var origin: Vector2 = visual.get("source", Vector2.ZERO) as Vector2 - card_motion_layer.global_position
+		var destination: Vector2 = board_view.get_global_rect().get_center() - card_motion_layer.global_position
+		var target_id: int = int(visual.get("target_id", -1))
+		if target_id >= 0 and board_view is BoardView3D:
+			var target: Dictionary = state.call("player", target_id) as Dictionary
+			var target_cell: Vector2i = target.get("position", Vector2i.ZERO) as Vector2i
+			var world_position: Vector3 = board_view.call("_world_position", target_cell) as Vector3
+			destination = board_view.global_position + board_view.call("_screen_position", world_position + Vector3(0, 0.45, 0)) as Vector2 - card_motion_layer.global_position
+		ghost.position = origin
+		var midpoint: Vector2 = origin.lerp(destination, 0.58) + Vector2(0, -46)
+		var tween: Tween = create_tween()
+		tween.set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
+		tween.tween_property(ghost, "position", midpoint, 0.12)
+		tween.parallel().tween_property(ghost, "rotation", -0.08, 0.12)
+		tween.tween_property(ghost, "position", destination - ghost.size * 0.5, 0.12)
+		tween.parallel().tween_property(ghost, "scale", Vector2.ONE * 0.34, 0.12)
+		tween.parallel().tween_property(ghost, "modulate:a", 0.0, 0.12)
+		tween.finished.connect(ghost.queue_free)
+	pending_card_visuals.clear()
+
+
+func _make_card_ghost(card_id: String) -> HandCard:
+	var definition: Dictionary = catalog.call("resolve_card", card_id) as Dictionary
+	var ghost: HandCard = HandCardScript.new() as HandCard
+	ghost.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ghost.focus_mode = Control.FOCUS_NONE
+	ghost.z_index = 0
+	ghost.configure(definition, _card_identity_badge(definition), _cost_text(definition), _range_text(definition, 0), false, float(settings.get("text_scale", 1.0)))
+	card_motion_layer.add_child(ghost)
+	ghost.size = ghost.custom_minimum_size
+	ghost.pivot_offset = ghost.size * 0.5
+	return ghost
 
 
 func _card_identity_text(definition: Dictionary) -> String:
@@ -827,6 +984,14 @@ func _on_board_cell_selected(position: Vector2i) -> void:
 	if settings_open or state == null:
 		return
 	var key: String = "%d:%d" % [position.x, position.y]
+	# Board-targeted cards (for example Suppress) carry their chosen center in
+	# the rule command. Resolve that command directly instead of exposing coordinates.
+	for command: Dictionary in selected_target_commands:
+		var payload: Dictionary = command.get("payload", {}) as Dictionary
+		var command_position: Array = payload.get("position", []) as Array
+		if command_position.size() >= 2 and Vector2i(int(command_position[0]), int(command_position[1])) == position:
+			_submit_human_command(command)
+			return
 	if move_commands.has(key):
 		if selected_move_key == key:
 			_submit_human_command(move_commands[key] as Dictionary)
@@ -926,12 +1091,17 @@ func _collect_events() -> void:
 	if state == null:
 		return
 	for event: Dictionary in state.call("drain_events") as Array[Dictionary]:
+		_queue_play_visual(event)
 		if audio_feedback != null:
 			audio_feedback.play_match_event(event)
+		if board_view != null and is_instance_valid(board_view):
+			board_view.show_match_event(event)
 		var payload: Dictionary = event.get("payload", {}) as Dictionary
 		var message: String = String(payload.get("message", ""))
 		if not message.is_empty():
 			log_lines.append(message)
+	if not pending_card_visuals.is_empty():
+		_animate_played_cards.call_deferred()
 
 
 func _schedule_ai() -> void:
@@ -946,7 +1116,7 @@ func _run_ai_loop() -> void:
 		var actor_id: int = _required_actor_id()
 		if actor_id == 0 or actor_id < 0:
 			break
-		var delay: float = 0.05 if bool(settings.get("reduced_motion", false)) else 0.28
+		var delay: float = 0.05 if bool(settings.get("reduced_motion", false)) else 0.60
 		await get_tree().create_timer(delay).timeout
 		var command: Dictionary = ai_controller.call("choose_command", state, actor_id) as Dictionary
 		if command.is_empty() or not bool(state.call("submit_command", command)):
@@ -991,13 +1161,19 @@ func _build_modal_layer() -> void:
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	modal_layer.add_child(center)
 	var panel: PanelContainer = _panel(COLORS["surface_high"] as Color, COLORS["gold"] as Color)
-	panel.custom_minimum_size = Vector2(520, 260)
+	panel.custom_minimum_size = Vector2(640, minf(600, get_viewport_rect().size.y - 64))
 	center.add_child(panel)
+	var content_scroll := ScrollContainer.new()
+	content_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	content_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	panel.add_child(content_scroll)
 	var box: VBoxContainer = VBoxContainer.new()
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_theme_constant_override("separation", 14)
-	panel.add_child(box)
+	content_scroll.add_child(box)
 	modal_title = _label("", 24, COLORS["ink"] as Color)
 	modal_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	modal_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(modal_title)
 	modal_description = _label("", 16, COLORS["muted"] as Color)
 	modal_description.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1005,11 +1181,7 @@ func _build_modal_layer() -> void:
 	box.add_child(modal_description)
 	modal_actions = VBoxContainer.new()
 	modal_actions.add_theme_constant_override("separation", 8)
-	var action_scroll := ScrollContainer.new()
-	action_scroll.custom_minimum_size = Vector2(500, 220)
-	action_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	action_scroll.add_child(modal_actions)
-	box.add_child(action_scroll)
+	box.add_child(modal_actions)
 
 
 func _refresh_blocking_modal() -> void:
@@ -1038,10 +1210,10 @@ func _refresh_blocking_modal() -> void:
 		var skill_id := String(pending_skill_choice.get("skill_id", ""))
 		var kind := String(pending_skill_choice.get("kind", ""))
 		modal_title.text = "结算选择"
-		modal_description.text = {"q_thunder_guard_offer": "正常摸牌已完成，是否发动【雷佑】？", "q_thunder_guard_category": "选择获得的牌类别", "q_thunderstorm_rank": "选择新的点数", "card_area_choice": "选择范围攻击的结算区域。", "momentum_direction": "选择目标移动的正交方向。", "k_strategy_card": "选择视为使用的奇异牌", "k_strategy_target": "选择目标", "k_brain_recover": "【巨脑】选择获得上次奇策的模拟牌，或取回全部媒介牌。", "endgame_card": "【终局】选择要当作的牌。", "endgame_target": "选择【终局】的目标。", "barrier_break_card": "【壁垒拆除】选择目标区域中要弃置的牌。", "shya_response_offer": "其他角色响应了 Shya 的牌，是否发动【碎光】赋予1闪光并摸1张？", "shya_break_offer": "是否发动【碎光】，移除目标的全部闪光？", "shya_break_consequence": "【碎光】：选择弃牌或受到等量真实伤害。", "ginger_power_target": "选择舍身突击目标", "ginger_power_reward": "选择追加效果", "zc_frenzy_category": "选择要全部弃置的手牌类别", "zc_frenzy_target": "选择本回合尚未被【狂极】命中的目标", "maddy_explore_choice": "选择【勘探】奖励", "maddy_reclaim_offer": "【开垦】本回合首次造成伤害后可发动：指定3个普通格，回合结束转化。", "maddy_reclaim_tile": "【开垦】选择一个普通格（共需指定3个）。", "na1_foresight_draw": "【远识】选择本次少摸的牌数；每少摸1张获得2枚金币。"}.get(kind, "请选择") as String
+		modal_description.text = {"q_thunder_guard_offer": "正常摸牌已完成，是否发动【雷佑】？", "q_thunder_guard_category": "选择获得的牌类别", "q_thunderstorm_rank": "选择新的点数", "card_area_choice": "选择范围攻击的结算区域。", "scatter_direction": "选择横向散射方向。", "momentum_direction": "选择目标移动的正交方向。", "k_strategy_card": "选择视为使用的奇异牌", "k_strategy_target": "选择目标", "k_brain_recover": "【巨脑】选择获得上次奇策的模拟牌，或取回全部媒介牌。", "endgame_card": "【终局】选择要当作的牌。", "endgame_target": "选择【终局】的目标。", "barrier_break_card": "【壁垒拆除】选择目标区域中要弃置的牌。", "shya_response_offer": "其他角色响应了 Shya 的牌，是否发动【碎光】赋予1闪光并摸1张？", "shya_break_offer": "是否发动【碎光】，移除目标的全部闪光？", "shya_break_consequence": "【碎光】：选择弃牌或受到等量真实伤害。", "ginger_power_target": "选择舍身突击目标", "ginger_power_reward": "选择追加效果", "zc_frenzy_category": "选择要全部弃置的手牌类别", "zc_frenzy_target": "选择本回合尚未被【狂极】命中的目标", "maddy_explore_choice": "选择【勘探】奖励", "maddy_reclaim_offer": "【开垦】本回合首次造成伤害后可发动：指定3个普通格，回合结束转化。", "maddy_reclaim_tile": "【开垦】选择一个普通格（共需指定3个）。", "na1_foresight_draw": "【远识】选择本次少摸的牌数；每少摸1张获得1枚金币。"}.get(kind, "请选择") as String
 		for command: Dictionary in state.call("legal_commands", 0) as Array[Dictionary]:
 			var value: Variant = (command.get("payload", {}) as Dictionary).get("value")
-			var label := String(value)
+			var label: String = str(value) if value != null else "确认"
 			if kind == "k_strategy_card" or kind == "endgame_card":
 				label = String((catalog.call("resolve_card", String(value)) as Dictionary).get("name", value))
 			elif kind == "barrier_break_card":
@@ -1066,11 +1238,13 @@ func _refresh_blocking_modal() -> void:
 			elif kind == "maddy_reclaim_tile":
 				label = "指定格子 %s" % String(value).replace(":", ", ")
 			elif kind == "na1_foresight_draw":
-				label = "少摸%d张 · 获得%d枚金币" % [int(value), int(value) * 2]
+				label = "少摸%d张 · 获得%d枚金币" % [int(value), int(value)]
 			elif kind == "card_area_choice":
 				label = {"northwest": "左上 2×2", "northeast": "右上 2×2", "southwest": "左下 2×2", "southeast": "右下 2×2", "row": "所在行", "column": "所在列"}.get(String(value), String(value)) as String
 			elif kind == "momentum_direction":
 				label = {"up": "向上", "right": "向右", "down": "向下", "left": "向左"}.get(String(value), String(value)) as String
+			elif kind == "scatter_direction":
+				label = {"left": "向左", "right": "向右"}.get(String(value), String(value)) as String
 			elif kind == "q_thunder_guard_end_decision":
 				label = "再次发动雷佑" if String(value) == "use" else "结束回合"
 			elif kind == "q_thunder_guard_offer":
@@ -1275,6 +1449,19 @@ func _open_settings() -> void:
 	modal_title.text = "设置"
 	modal_description.text = "调整会立即生效并保存。"
 	_clear_children(modal_actions)
+	var language_row := HBoxContainer.new()
+	var language_label := _label("语言 / Language", 16, COLORS["ink"] as Color)
+	language_label.custom_minimum_size.x = 150
+	language_row.add_child(language_label)
+	var language_picker := OptionButton.new()
+	language_picker.name = "LanguagePicker"
+	language_picker.add_item("简体中文")
+	language_picker.add_item("English")
+	language_picker.selected = 1 if String(settings.get("language", "zh_CN")) == "en" else 0
+	language_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	language_picker.item_selected.connect(_set_language)
+	language_row.add_child(language_picker)
+	modal_actions.add_child(language_row)
 	var volume_row: HBoxContainer = HBoxContainer.new()
 	var volume_label: Label = _label("主音量", 16, COLORS["ink"] as Color)
 	volume_label.custom_minimum_size.x = 110
@@ -1339,7 +1526,7 @@ func _open_debug_info() -> void:
 
 
 func _copy_debug_info(button: Button) -> void:
-	DisplayServer.clipboard_set(_debug_info_text())
+	DisplayServer.clipboard_set(LocalizationScript.text(_debug_info_text()))
 	button.text = "已复制调试信息"
 	if audio_feedback != null:
 		audio_feedback.play_confirmation()
@@ -1397,6 +1584,18 @@ func _set_master_volume(value: float) -> void:
 	_apply_audio_settings()
 
 
+func _set_language(index: int) -> void:
+	settings["language"] = "en" if index == 1 else "zh_CN"
+	LocalizationScript.set_language(String(settings["language"]))
+	DisplayServer.window_set_title(LocalizationScript.text("崩坠牌局"))
+	# Rebuild only the presentation when closing settings; keep the live match,
+	# pending choices and replay command sequence intact.
+	if is_instance_valid(board_view):
+		board_view.queue_redraw()
+	if not SaveServiceScript.save_settings(settings):
+		modal_description.text = "设置无法保存；请检查存储空间或目录权限。"
+
+
 func _set_text_scale(value: float) -> void:
 	settings["text_scale"] = value
 	theme = _build_theme(value)
@@ -1404,6 +1603,8 @@ func _set_text_scale(value: float) -> void:
 
 func _set_reduced_motion(enabled: bool) -> void:
 	settings["reduced_motion"] = enabled
+	if board_view != null and is_instance_valid(board_view):
+		board_view.set_reduced_motion(enabled)
 
 
 func _open_tutorial() -> void:
@@ -1412,7 +1613,7 @@ func _open_tutorial() -> void:
 	settings_open = true
 	modal_layer.visible = true
 	modal_title.text = "回合规则"
-	modal_description.text = "15x15 棋盘只在玩家被击败后缩至 11x11、7x7。\n回合开始恢复体力和法力，回合外资源为0；角色技能不消耗行动点或资源，是否限次只按技能文本执行。每回合有1次免费移动。\n手牌上限为当前生命值减2，最低保留1张，超出时自行选择弃牌。\n第5轮起单体伤害提高，第7轮再次提高；范围伤害不受影响。\n只剩一名角色时立即获胜；同时全灭按淘汰数、生命比例、伤害、护甲、手牌依次裁定。\n红框是可达格，金框是攻击范围和可选目标。点击对手可查看最近5张公开出牌。"
+	modal_description.text = "15x15 棋盘只在玩家被击败后缩至 11x11、7x7。\n回合开始恢复体力和法力，回合外资源为0；没有行动点限制；卡牌和角色技能按各自文本支付费用并执行限次。每回合有1次免费移动。\n手牌上限为当前生命值减2，最低保留1张，超出时自行选择弃牌。\n第5轮起单体伤害提高，第7轮再次提高；范围伤害不受影响。\n只剩一名角色时立即获胜；同时全灭按淘汰数、生命比例、伤害、护甲、手牌依次裁定。\n红框是可达格，金框是攻击范围和可选目标。点击对手可查看最近5张公开出牌。"
 	_clear_children(modal_actions)
 	var close_button: Button = Button.new()
 	close_button.text = "进入对局" if state != null else "返回角色选择"
@@ -1582,7 +1783,9 @@ func _cost_text(definition: Dictionary) -> String:
 
 
 func _short_text(value: String, maximum: int) -> String:
-	return value if value.length() <= maximum else "%s…" % value.left(maximum - 1)
+	var localized := LocalizationScript.text(value)
+	var limit := maximum * 2 if LocalizationScript.language == "en" else maximum
+	return localized if localized.length() <= limit else "%s…" % localized.left(limit - 1)
 
 
 func _profession_name(profession: String) -> String:
